@@ -15,11 +15,11 @@ A broker-client that wraps the local Ollama API as an MCP tool. Any MCP client c
 ## Quick Start
 
 ```bash
-# Terminal 1 — Start the broker
-npm run broker
+# Terminal 1 — Start the broker (from mcp-broker root)
+npm run dev
 
-# Terminal 2 — Start the Ollama broker-client
-npm run example:ollama
+# Terminal 2 — Start the Ollama broker-client (from examples/)
+npm run ollama
 ```
 
 Then from any MCP client, call `ollama__generate` with a `prompt` argument.
@@ -28,7 +28,7 @@ Then from any MCP client, call `ollama__generate` with a `prompt` argument.
 
 | Script | Command |
 |--------|---------|
-| `npm run example:ollama` | Starts the Ollama broker-client |
+| `npm run ollama` | Starts the Ollama broker-client |
 
 ## How It Works
 

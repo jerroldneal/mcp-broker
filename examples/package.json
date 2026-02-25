@@ -1,0 +1,24 @@
+{
+  "name": "mcp-broker-examples",
+  "version": "1.1.0",
+  "private": true,
+  "description": "Example scripts for mcp-broker",
+  "type": "module",
+  "scripts": {
+    "ls": "node list-tools.js",
+    "broker-client": "node hello-world/broker-client.js",
+    "client": "node hello-world/mcp-client.js",
+    "demo": "node hello-world/demo.js",
+    "demo:stepwise": "node hello-world/demo-stepwise.js",
+    "serve": "node hello-world/serve.js",
+    "serve:chrome": "node chrome-ext-demo/serve-chrome.js",
+    "auto-announce": "node chrome-ext-demo/auto-announce.js",
+    "click": "node chrome-ext-demo/click-announce.js",
+    "ollama": "node ollama/ollama-rc.js",
+    "ai-invoke": "node ai-invoke/ai-invoke-rc.js",
+    "ai-caller": "node ai-invoke/ai-caller.js",
+    "service": "node simple-service/simple-service.js",
+    "speaker": "node conversation-speaker/conversation-speaker.js",
+    "test:verify": "node test-verify-examples.js"
+  }
+}

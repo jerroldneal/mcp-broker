@@ -17,22 +17,22 @@ A broker-client that publishes an `invoke` tool. When called with a natural lang
 ## Quick Start
 
 ```bash
-# Terminal 1 — Start the broker
-npm run broker
+# Terminal 1 — Start the broker (from mcp-broker root)
+npm run dev
 
-# Terminal 2 — Start the AI invoke broker-client
-npm run example:ai-invoke
+# Terminal 2 — Start the AI invoke broker-client (from examples/)
+npm run ai-invoke
 
-# Terminal 3 — Run the caller
-npm run example:ai-caller
+# Terminal 3 — Run the caller (from examples/)
+npm run ai-caller
 ```
 
 ## npm Scripts
 
 | Script | Command |
 |--------|---------|
-| `npm run example:ai-invoke` | Starts the AI invoke broker-client |
-| `npm run example:ai-caller` | Runs the MCP client caller |
+| `npm run ai-invoke` | Starts the AI invoke broker-client |
+| `npm run ai-caller` | Runs the MCP client caller |
 
 ## How It Works
 

@@ -11,11 +11,11 @@ A minimal broker-client that runs as a long-lived service. The simplest possible
 ## Quick Start
 
 ```bash
-# Terminal 1 — Start the broker
-npm run broker
+# Terminal 1 — Start the broker (from mcp-broker root)
+npm run dev
 
-# Terminal 2 — Start the service
-npm run example:service
+# Terminal 2 — Start the service (from examples/)
+npm run service
 ```
 
 Then call its tools from any MCP client connected to `http://localhost:3098/mcp`.
@@ -24,7 +24,7 @@ Then call its tools from any MCP client connected to `http://localhost:3098/mcp`
 
 | Script | Command |
 |--------|---------|
-| `npm run example:service` | Starts the service |
+| `npm run service` | Starts the service |
 
 ## Tools
 

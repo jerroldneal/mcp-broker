@@ -23,14 +23,14 @@ npm run demo
 ### Option B: Step-by-step (3 terminals)
 
 ```bash
-# Terminal 1 — Start the broker
-npm run broker
+# Terminal 1 — Start the broker (from mcp-broker root)
+npm run dev
 
-# Terminal 2 — Start the broker-client
-npm run example:broker-client
+# Terminal 2 — Start the broker-client (from examples/)
+npm run broker-client
 
-# Terminal 3 — Run the MCP client
-npm run example:client
+# Terminal 3 — Run the MCP client (from examples/)
+npm run client
 ```
 
 ### Option C: Stepwise orchestrator
@@ -45,9 +45,9 @@ npm run demo:stepwise
 |--------|---------|
 | `npm run demo` | Runs the all-in-one demo |
 | `npm run demo:stepwise` | Runs the step-by-step orchestrator |
-| `npm run example:broker-client` | Starts just the broker-client |
-| `npm run example:client` | Runs just the MCP client |
-| `npm run example:serve` | Starts server + broker-client together |
+| `npm run broker-client` | Starts just the broker-client |
+| `npm run client` | Runs just the MCP client |
+| `npm run serve` | Starts server + broker-client together |
 
 ## What It Demonstrates
 

@@ -6,8 +6,8 @@
  * Stays alive until Ctrl+C. Reconnects automatically if the server restarts.
  *
  * Usage:
- *   npm run broker   # terminal 1
- *   npm run example:service  # terminal 2
+ *   npm run dev   # terminal 1
+ *   npm run service  # terminal 2
  */
 
 import { BrokerClient } from '../../sdk.js';

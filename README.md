@@ -23,7 +23,7 @@ An MCP server that acts as a **tool-routing broker** — tool providers connect 
 ```bash
 cd mcp-broker
 npm install
-npm run broker
+npm run dev
 # Server listening:  HTTP MCP on :3098  |  WebSocket on :3099
 ```
 
@@ -46,6 +46,7 @@ examples/
 Runs the server, a broker-client, and an MCP client in one command:
 
 ```bash
+cd examples
 npm run demo
 ```
 
@@ -54,6 +55,7 @@ npm run demo
 Runs the same 3-terminal flow (server → broker-client → MCP client) orchestrated as one process:
 
 ```bash
+cd examples
 npm run demo:stepwise
 ```
 
@@ -64,21 +66,22 @@ This starts the server, waits for it, starts the broker-client, waits for regist
 Starts the server + sample broker-client together, staying alive for interactive use:
 
 ```bash
-npm run example:serve
+cd examples
+npm run serve
 # Both running. Now use another command or the Chrome extension.
 ```
 
 Useful when you want the server running for:
 - The Chrome extension demo (see below)
-- Manual `npm run example:client` testing
-- The auto-announcer (`npm run example:auto-announce`)
+- Manual `npm run client` testing (from `examples/`)
+- The auto-announcer (`npm run auto-announce` from `examples/`)
 
 ## Step-by-Step Demo (manual, 3 terminals)
 
 ### 1. Start the server
 
 ```bash
-npm run broker
+npm run dev
 # [broker] WebSocket server listening on port 3099
 # [broker] MCP HTTP server listening on http://localhost:3098/mcp
 ```
@@ -88,7 +91,8 @@ npm run broker
 In a second terminal:
 
 ```bash
-npm run example:broker-client
+cd examples
+npm run broker-client
 # Broker client "hello-world" connected — publishing greet, add
 ```
 
@@ -97,7 +101,8 @@ npm run example:broker-client
 In a third terminal:
 
 ```bash
-npm run example:client
+cd examples
+npm run client
 # Connects to http://localhost:3098/mcp
 # Lists tools: hello-world__greet, hello-world__add, list_broker_clients
 # Calls greet and add — results printed
@@ -126,7 +131,8 @@ A full browser demo: a Chrome extension with a PST clock page that auto-injects 
 ### Quick Start (single command)
 
 ```bash
-npm run example:serve:chrome
+cd examples
+npm run serve:chrome
 ```
 
 Starts the MCP broker server + auto-announcer in one process, then prints
@@ -135,7 +141,7 @@ the auto-announcer calls `clickAnnounce` every 15s.
 
 ### Manual Setup
 
-1. Start the server: `npm run broker`
+1. Start the server: `npm run dev`
 2. Open `chrome://extensions`, enable **Developer mode**
 3. Click **Load unpacked**, select `examples/chrome-ext-demo/`
 4. Click the extension icon → **Open Clock Page**
@@ -165,8 +171,9 @@ the auto-announcer calls `clickAnnounce` every 15s.
 A Node.js MCP client that calls `clickAnnounce` every 15 seconds:
 
 ```bash
-# Requires: server running (npm run broker) + Chrome extension injected
-npm run example:auto-announce
+# Requires: server running (npm run dev) + Chrome extension injected
+cd examples
+npm run auto-announce
 # Connects to http://localhost:3098/mcp
 # Calls clock-page__clickAnnounce every 15s
 # Clock page speaks the current PST time via kokoro-tts
@@ -247,22 +254,38 @@ The entire conversation is rendered live in the **AI Conversation Log** panel �
 
 ## npm Scripts
 
+### Broker (run from project root)
+
 | Script | Command | Description |
 |---|---|---|
-| `npm run broker` | `node server.js` | Start the broker server (long-running) |
-| `npm run ls` | `node examples/list-tools.js` | List connected broker-clients and available tools (exits) |
-| `npm run example:broker-client` | `node examples/hello-world/broker-client.js` | Start a sample broker-client (long-running) |
-| `npm run example:client` | `node examples/hello-world/mcp-client.js` | Run an MCP client against the server (exits) |
-| `npm run demo` | `node examples/hello-world/demo.js` | All-in-one demo — server + RC + client (exits) |
-| `npm run demo:stepwise` | `node examples/hello-world/demo-stepwise.js` | Step-by-step demo orchestrated in one process (exits) |
-| `npm run example:serve` | `node examples/hello-world/serve.js` | Server + sample RC together (long-running) |
-| `npm run example:serve:chrome` | `node examples/chrome-ext-demo/serve-chrome.js` | Server + auto-announcer for Chrome ext demo (long-running) |
-| `npm run example:auto-announce` | `node examples/chrome-ext-demo/auto-announce.js` | Call `clickAnnounce` every 15s via MCP (long-running) |
-| `npm run example:click` | `node examples/chrome-ext-demo/click-announce.js` | One-shot: list tools + call clickAnnounce (exits) |
-| `npm run example:ollama` | `node examples/ollama/ollama-rc.js` | Ollama broker-client — publishes `generate` tool (long-running) |
-| `npm run example:ai-invoke` | `node examples/ai-invoke/ai-invoke-rc.js` | AI-invoke broker-client — uses `chat()` to generate + eval code (long-running) |
-| `npm run example:ai-caller` | `node examples/ai-invoke/ai-caller.js` | MCP client that calls the `invoke` tool with natural language (exits) |
-| `npm run example:service` | `node examples/simple-service/simple-service.js` | Minimal long-running service with ping, chat, exit tools |
+| `npm run dev` | `node server.js` | Start the broker server (long-running) |
+| `npm run repl` | `node repl.js` | Interactive REPL for the broker |
+
+### Examples (run from `examples/`)
+
+Examples have their own `package.json`. Run them from the `examples/` directory:
+
+```bash
+cd examples
+npm run <script>
+```
+
+| Script | Command | Description |
+|---|---|---|
+| `npm run ls` | `node list-tools.js` | List connected broker-clients and available tools (exits) |
+| `npm run broker-client` | `node hello-world/broker-client.js` | Start a sample broker-client (long-running) |
+| `npm run client` | `node hello-world/mcp-client.js` | Run an MCP client against the server (exits) |
+| `npm run demo` | `node hello-world/demo.js` | All-in-one demo — server + RC + client (exits) |
+| `npm run demo:stepwise` | `node hello-world/demo-stepwise.js` | Step-by-step demo orchestrated in one process (exits) |
+| `npm run serve` | `node hello-world/serve.js` | Server + sample RC together (long-running) |
+| `npm run serve:chrome` | `node chrome-ext-demo/serve-chrome.js` | Server + auto-announcer for Chrome ext demo (long-running) |
+| `npm run auto-announce` | `node chrome-ext-demo/auto-announce.js` | Call `clickAnnounce` every 15s via MCP (long-running) |
+| `npm run click` | `node chrome-ext-demo/click-announce.js` | One-shot: list tools + call clickAnnounce (exits) |
+| `npm run ollama` | `node ollama/ollama-rc.js` | Ollama broker-client — publishes `generate` tool (long-running) |
+| `npm run ai-invoke` | `node ai-invoke/ai-invoke-rc.js` | AI-invoke broker-client — uses `chat()` to generate + eval code (long-running) |
+| `npm run ai-caller` | `node ai-invoke/ai-caller.js` | MCP client that calls the `invoke` tool with natural language (exits) |
+| `npm run service` | `node simple-service/simple-service.js` | Minimal long-running service with ping, chat, exit tools |
+| `npm run speaker` | `node conversation-speaker/conversation-speaker.js` | Multi-persona AI conversation with TTS output |
 
 ## Ollama Integration
 
@@ -272,8 +295,8 @@ The Ollama broker-client connects to the MCP broker and publishes a `generate` t
 
 1. Install and run Ollama: `ollama serve`
 2. Pull a model: `ollama pull qwen2.5:3b`
-3. Start the MCP server: `npm run broker`
-4. Start the Ollama broker-client: `npm run example:ollama`
+3. Start the MCP server: `npm run dev`
+4. Start the Ollama broker-client: `cd examples && npm run ollama`
 5. Load the Chrome extension and open the clock page
 6. Type a prompt in the **Ollama Inference** panel and hit **Send**
 
@@ -361,11 +384,13 @@ A broker-client that uses `chat()` to dynamically generate and execute code:
 ```bash
 # Terminal 1: Start Ollama MCP server (port 3042)
 # Terminal 2:
-npm run broker
+npm run dev
 # Terminal 3:
-npm run example:ai-invoke
+cd examples
+npm run ai-invoke
 # Terminal 4:
-npm run example:ai-caller
+cd examples
+npm run ai-caller
 ```
 
 The caller sends natural language instructions, the ai-invoke RC asks the AI to generate code via `chat()`, evals it, and returns the result.

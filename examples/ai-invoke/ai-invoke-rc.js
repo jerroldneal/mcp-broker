@@ -14,11 +14,11 @@
  *
  * Run:
  *   1. Start Ollama MCP server on port 3042
- *   2. npm run broker
- *   3. npm run example:ai-invoke
+ *   2. npm run dev
+ *   3. npm run ai-invoke
  *
  * Then from another terminal:
- *   npm run example:ai-caller
+ *   npm run ai-caller
  */
 
 import { BrokerClient } from '../../sdk.js';

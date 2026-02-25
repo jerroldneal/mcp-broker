@@ -6,8 +6,8 @@
  * lists available tools, and calls the hello-world broker-client's "greet" tool.
  *
  * Prerequisites:
- *   1. Start the server:           npm run broker
- *   2. Start broker-client:       npm run example:broker-client
+ *   1. Start the server:           npm run dev
+ *   2. Start broker-client:       npm run broker-client
  *   3. Then run this:              npm run client
  *
  * This demonstrates the consumer side — a normal MCP client that has no idea

@@ -6,7 +6,7 @@
  * prompts for each parameter, calls the tool, and prints the result.
  *
  * Run:
- *   npm run broker   # terminal 1
+ *   npm run dev   # terminal 1
  *   npm run repl             # terminal 2
  */
 

@@ -5,23 +5,8 @@
   "type": "module",
   "main": "server.js",
   "scripts": {
-    "broker": "node server.js",
-    "repl": "node repl.js",
-    "ls": "node examples/list-tools.js",
-    "example:broker-client": "node examples/hello-world/broker-client.js",
-    "example:client": "node examples/hello-world/mcp-client.js",
-    "demo": "node examples/hello-world/demo.js",
-    "demo:stepwise": "node examples/hello-world/demo-stepwise.js",
-    "example:serve": "node examples/hello-world/serve.js",
-    "example:serve:chrome": "node examples/chrome-ext-demo/serve-chrome.js",
-    "example:auto-announce": "node examples/chrome-ext-demo/auto-announce.js",
-    "example:click": "node examples/chrome-ext-demo/click-announce.js",
-    "example:ollama": "node examples/ollama/ollama-rc.js",
-    "example:ai-invoke": "node examples/ai-invoke/ai-invoke-rc.js",
-    "example:ai-caller": "node examples/ai-invoke/ai-caller.js",
-    "example:service": "node examples/simple-service/simple-service.js",
-    "example:speaker": "node examples/conversation-speaker/conversation-speaker.js",
-    "test:verify-examples": "node examples/test-verify-examples.js"
+    "dev": "node server.js",
+    "repl": "node repl.js"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",

@@ -1,9 +1,17 @@
 # Examples
 
-All examples require the MCP broker running on ports 3098 (HTTP) and 3099 (WebSocket). Start it first:
+All examples require the MCP broker running on ports 3098 (HTTP) and 3099 (WebSocket). Start it first from the project root:
 
 ```bash
-npm run broker
+# From mcp-broker root
+npm run dev
+```
+
+Then run examples from this directory:
+
+```bash
+cd examples
+npm run <script>
 ```
 
 ## Overview
@@ -44,17 +52,17 @@ The foundational example. A broker-client publishes `greet` and `add` tools. A s
 npm run demo
 
 # Or step-by-step
-npm run example:broker-client   # Terminal 2
-npm run example:client           # Terminal 3
+npm run broker-client   # Terminal 2
+npm run client           # Terminal 3
 ```
 
 | Script | Description |
 |--------|-------------|
 | `npm run demo` | All-in-one demo (server + RC + client in one process) |
 | `npm run demo:stepwise` | Orchestrated 3-step demo |
-| `npm run example:broker-client` | Start just the broker-client |
-| `npm run example:client` | Run just the MCP client |
-| `npm run example:serve` | Start server + broker-client together |
+| `npm run broker-client` | Start just the broker-client |
+| `npm run client` | Run just the MCP client |
+| `npm run serve` | Start server + broker-client together |
 
 ---
 
@@ -65,7 +73,7 @@ A minimal long-lived broker-client — the simplest starting point for building 
 **Files:** `simple-service.js`
 
 ```bash
-npm run example:service
+npm run service
 ```
 
 **Tools:** `ping` (health check), `exit` (graceful shutdown), `chat` (AI via broker chat proxy)
@@ -81,7 +89,7 @@ Wraps the local Ollama REST API as an MCP tool. Any MCP client can call `generat
 **Files:** `ollama-rc.js`
 
 ```bash
-npm run example:ollama
+npm run ollama
 ```
 
 | Variable | Default | Description |
@@ -100,8 +108,8 @@ A broker-client that publishes an `invoke` tool. Given a natural language instru
 **Requires:** Ollama MCP server on port 3042
 
 ```bash
-npm run example:ai-invoke    # Terminal 2
-npm run example:ai-caller    # Terminal 3
+npm run ai-invoke    # Terminal 2
+npm run ai-caller    # Terminal 3
 ```
 
 ```
@@ -119,7 +127,7 @@ Four AI personas (Marcus the Manager, Sarah the Supervisor, George the Developer
 **Requires:** Ollama MCP server on port 3042, Kokoro TTS on port 3021
 
 ```bash
-npm run example:speaker
+npm run speaker
 ```
 
 **Tools per persona:** `marcus`, `sarah`, `george`, `emma` — each generates a contextual AI response spoken in their unique voice.
@@ -138,7 +146,7 @@ A Chrome MV3 extension that injects broker-clients into web pages. Includes a cl
 
 ```bash
 # Start broker + auto-announcer
-npm run example:serve:chrome
+npm run serve:chrome
 
 # Load extension in Chrome
 # chrome://extensions → Developer mode → Load unpacked → select chrome-ext-demo/
@@ -146,9 +154,9 @@ npm run example:serve:chrome
 
 | Script | Description |
 |--------|-------------|
-| `npm run example:serve:chrome` | Starts broker + auto-announcer |
-| `npm run example:auto-announce` | Runs just the auto-announcer (calls clickAnnounce every 15s) |
-| `npm run example:click` | One-shot clickAnnounce call |
+| `npm run serve:chrome` | Starts broker + auto-announcer |
+| `npm run auto-announce` | Runs just the auto-announcer (calls clickAnnounce every 15s) |
+| `npm run click` | One-shot clickAnnounce call |
 
 Demonstrates browser-injected broker-clients, remote page control from Node.js, and iterative AI property resolution via multi-turn `rc.chat()`.
 
@@ -262,7 +270,7 @@ sequenceDiagram
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Connecting: npm run example:service
+    [*] --> Connecting: npm run service
     Connecting --> Registered: register { ping, exit, chat }
     Registered --> Registered: tool calls (ping, chat)
     Registered --> Disconnected: tool call (exit) / SIGINT

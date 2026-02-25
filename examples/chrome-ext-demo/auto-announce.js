@@ -5,7 +5,7 @@
  * Connects to the already-running broker as a standard MCP client
  * (via Streamable HTTP) and calls clock-page__clickAnnounce every 15 seconds.
  *
- * Prerequisite: server must already be running (npm run broker)
+ * Prerequisite: server must already be running (npm run dev)
  * Run:  npm run auto-announce
  */
 

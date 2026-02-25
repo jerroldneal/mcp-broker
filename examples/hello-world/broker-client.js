@@ -6,8 +6,8 @@
  *   - greet: Returns a greeting
  *   - add: Adds two numbers
  *
- * Start the server first:   npm run broker
- * Then run this example:    npm run example
+ * Start the server first:   npm run dev
+ * Then run this example:    npm run broker-client
  */
 
 import { BrokerClient } from '../../sdk.js';

@@ -24,7 +24,7 @@ A Chrome MV3 extension that injects broker-clients into web pages. The demo uses
 ### 1. Start the server
 
 ```bash
-npm run example:serve:chrome
+npm run serve:chrome
 ```
 
 This starts the broker and the auto-announcer together.
@@ -44,9 +44,9 @@ The auto-announcer calls `clickAnnounce` every 15 seconds, which triggers the cl
 
 | Script | Command |
 |--------|---------|
-| `npm run example:serve:chrome` | Starts broker + auto-announcer |
-| `npm run example:auto-announce` | Runs just the auto-announcer |
-| `npm run example:click` | One-shot clickAnnounce call |
+| `npm run serve:chrome` | Starts broker + auto-announcer |
+| `npm run auto-announce` | Runs just the auto-announcer |
+| `npm run click` | One-shot clickAnnounce call |
 
 ## Architecture
 

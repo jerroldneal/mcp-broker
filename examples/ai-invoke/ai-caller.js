@@ -12,9 +12,9 @@
  *
  * Run:
  *   1. Start Ollama MCP server on port 3042
- *   2. npm run broker
- *   3. npm run example:ai-invoke
- *   4. npm run example:ai-caller
+ *   2. npm run dev
+ *   3. npm run ai-invoke
+ *   4. npm run ai-caller
  */
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
