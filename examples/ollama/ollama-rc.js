@@ -16,7 +16,7 @@
 import { BrokerClient } from '../../sdk.js';
 
 const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
-const DEFAULT_MODEL = process.env.OLLAMA_MODEL || 'llama3.2';
+const DEFAULT_MODEL = process.env.OLLAMA_MODEL || 'qwen2.5';
 const CLIENT_ID = 'ollama';
 
 const rc = new BrokerClient(CLIENT_ID, {

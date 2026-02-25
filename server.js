@@ -123,7 +123,7 @@ function buildStatusSnapshot() {
     clients.push({
       clientId,
       connectedAt: entry.connectedAt,
-      tools: entry.tools.map(t => ({ name: t.name, description: t.description || '' })),
+      tools: entry.tools.map(t => ({ name: t.name, description: t.description || '', inputSchema: t.inputSchema || { type: 'object', properties: {} } })),
     });
   }
   return {
@@ -504,6 +504,24 @@ app.get('/api/activity', (_req, res) => {
   res.json(activityLog);
 });
 
+app.post('/api/call-tool', async (req, res) => {
+  const { clientId, tool, arguments: args } = req.body || {};
+  if (!clientId || !tool) {
+    return res.status(400).json({ error: 'clientId and tool are required' });
+  }
+  const entry = registry.get(clientId);
+  if (!entry) {
+    return res.status(404).json({ error: `Client "${clientId}" not connected` });
+  }
+  const start = Date.now();
+  try {
+    const result = await callProviderTool(clientId, tool, args || {});
+    res.json({ content: result.content, isError: result.isError || false, duration: Date.now() - start });
+  } catch (err) {
+    res.status(500).json({ error: err.message, duration: Date.now() - start });
+  }
+});
+
 app.get('/api/events', (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -523,7 +541,7 @@ async function main() {
   app.listen(HTTP_PORT, () => {
     log(`MCP HTTP server listening on http://localhost:${HTTP_PORT}/mcp`);
   });
-  log('MCP MCP Broker running (HTTP + WebSocket)');
+  log('MCP Broker running (HTTP + WebSocket)');
 }
 
 main().catch((err) => {
