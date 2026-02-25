@@ -54,5 +54,5 @@ The `invoke` tool uses `rc.chat()` to ask the AI to generate pure JavaScript, th
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OLLAMA_MODEL` | `llama3.2` | Model to use for code generation |
+| `OLLAMA_MODEL` | `qwen2.5:3b` | Model to use for code generation |
 | `BROKER_WS_URL` | `ws://localhost:3099` | WebSocket URL of the broker |

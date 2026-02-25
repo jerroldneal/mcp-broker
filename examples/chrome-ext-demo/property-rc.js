@@ -28,7 +28,7 @@
   const RECONNECT_BASE_MS = 2000;
   const RECONNECT_MAX_MS = 30000;
   const CHAT_TIMEOUT_MS = 120000;
-  const DEFAULT_MODEL = 'llama3.2';
+  const DEFAULT_MODEL = 'qwen2.5:3b';
 
   let ws = null;
   let reconnectDelay = RECONNECT_BASE_MS;

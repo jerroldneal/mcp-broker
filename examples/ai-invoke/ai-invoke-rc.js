@@ -24,7 +24,7 @@
 import { BrokerClient } from '../../sdk.js';
 
 const CLIENT_ID = 'ai-invoke';
-const DEFAULT_MODEL = process.env.OLLAMA_MODEL || 'llama3.2';
+const DEFAULT_MODEL = process.env.OLLAMA_MODEL || 'qwen2.5:3b';
 
 const rc = new BrokerClient(CLIENT_ID, {
   url: process.env.BROKER_WS_URL || 'ws://localhost:3099',

@@ -43,5 +43,5 @@ MCP Client → HTTP → broker → WS → ollama RC → Ollama API → response
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `OLLAMA_URL` | `http://localhost:11434` | Ollama API base URL |
-| `OLLAMA_MODEL` | `llama3.2` | Default model for generation |
+| `OLLAMA_MODEL` | `qwen2.5:3b` | Default model for generation |
 | `BROKER_WS_URL` | `ws://localhost:3099` | WebSocket URL of the broker |
