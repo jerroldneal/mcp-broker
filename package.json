@@ -1,6 +1,6 @@
 {
   "name": "mcp-broker",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "MCP tool-routing broker — tool providers connect outbound and publish tools, MCP clients consume them transparently",
   "type": "module",
   "main": "server.js",

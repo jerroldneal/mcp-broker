@@ -271,7 +271,7 @@ The Ollama broker-client connects to the MCP broker and publishes a `generate` t
 ### Setup
 
 1. Install and run Ollama: `ollama serve`
-2. Pull a model: `ollama pull llama3.2`
+2. Pull a model: `ollama pull qwen2.5:3b`
 3. Start the MCP server: `npm run broker`
 4. Start the Ollama broker-client: `npm run example:ollama`
 5. Load the Chrome extension and open the clock page
@@ -302,7 +302,7 @@ Browser (clock.js)           MCP Broker (:3098)        ollama-rc.js            O
 | Environment Variable | Default | Description |
 |---|---|---|
 | `OLLAMA_URL` | `http://localhost:11434` | Ollama API base URL |
-| `OLLAMA_MODEL` | `llama3.2` | Default model for generate calls |
+| `OLLAMA_MODEL` | `qwen2.5:3b` | Default model for generate calls |
 | `BROKER_WS_URL` | `ws://localhost:3099` | MCP broker WebSocket URL |
 
 ## VS Code MCP Configuration
@@ -345,7 +345,7 @@ Broker-Client              Broker (:3099)         Ollama MCP (:3042)
 
 ```javascript
 const response = await rc.chat({
-  model: 'llama3.2',
+  model: 'qwen2.5:3b',
   messages: [
     { role: 'system', content: 'You write JavaScript code.' },
     { role: 'user', content: 'Return code that counts all buttons' },
@@ -391,7 +391,7 @@ await rc.connect();
 
 // Chat is available immediately after connect
 const response = await rc.chat({
-  model: 'llama3.2',
+  model: 'qwen2.5:3b',
   messages: [{ role: 'user', content: 'Hello' }],
 });
 console.log(response.message.content);
@@ -426,6 +426,26 @@ WebSocket messages between server and broker-clients:
 | client → server | `chat_request` | `requestId`, `payload` (Ollama chat format) |
 | server → client | `chat_response` | `requestId`, `payload` (Ollama chat response) |
 | server → client | `chat_error` | `requestId`, `error` |
+
+## Dashboard
+
+The broker includes a built-in web dashboard at `http://localhost:3098/` with:
+
+- **Stats bar** — Uptime, connected clients, total tools, call/chat counts
+- **Tool Explorer** — Hierarchical client → tool tree with expand/collapse
+- **Interactive Tool Panel** — Select any tool to see an auto-generated form from its `inputSchema`, fill in parameters, and click **Run Tool** to invoke it via `POST /api/call-tool`
+- **Activity Log** — Real-time SSE feed of connections, tool calls, and chat requests
+- **Live indicator** — SSE connection status (green = connected)
+
+### Dashboard API
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/` | GET | Dashboard HTML |
+| `/api/status` | GET | Server status snapshot (clients, tools, stats) |
+| `/api/activity` | GET | Recent activity entries |
+| `/api/events` | GET | SSE stream (state + activity events) |
+| `/api/call-tool` | POST | Invoke a tool: `{ clientId, tool, arguments }` → `{ content, isError, duration }` |
 
 ## Docker
 
