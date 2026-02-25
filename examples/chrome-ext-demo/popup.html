@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      width: 280px;
+      padding: 16px;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #1e293b;
+      color: #e2e8f0;
+    }
+    h2 { font-size: 14px; margin: 0 0 12px; color: #94a3b8; }
+    button {
+      display: block;
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    #open-clock { background: #3b82f6; color: white; }
+    #open-clock:hover { background: #2563eb; }
+    #inject-rc { background: #8b5cf6; color: white; }
+    #inject-rc:hover { background: #7c3aed; }
+    #inject-rc:disabled { background: #475569; cursor: not-allowed; }
+    #status {
+      font-size: 11px;
+      color: #64748b;
+      margin-top: 8px;
+      min-height: 16px;
+    }
+    #tools-section {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #334155;
+    }
+    #tools-section h3 {
+      font-size: 12px;
+      color: #94a3b8;
+      margin: 0 0 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    #refresh-tools {
+      font-size: 10px;
+      padding: 2px 8px;
+      background: #334155;
+      color: #94a3b8;
+      border: 1px solid #475569;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    #refresh-tools:hover { background: #475569; color: #e2e8f0; }
+    .tool-btn {
+      display: block;
+      width: 100%;
+      padding: 8px 10px;
+      margin-bottom: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      border: 1px solid #475569;
+      border-radius: 6px;
+      cursor: pointer;
+      background: #334155;
+      color: #e2e8f0;
+      text-align: left;
+      transition: background 0.15s;
+    }
+    .tool-btn:hover { background: #475569; }
+    .tool-btn:disabled { opacity: 0.5; cursor: wait; }
+    .tool-btn .tool-name { font-weight: 600; }
+    .tool-btn .tool-desc {
+      display: block;
+      font-size: 10px;
+      color: #94a3b8;
+      margin-top: 2px;
+    }
+    .tool-result {
+      font-size: 11px;
+      color: #4ade80;
+      margin: -2px 0 6px 10px;
+      word-break: break-all;
+    }
+    .tool-error {
+      font-size: 11px;
+      color: #f87171;
+      margin: -2px 0 6px 10px;
+    }
+    #tools-loading {
+      font-size: 11px;
+      color: #64748b;
+    }
+    .health-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 0;
+      font-size: 12px;
+      border-bottom: 1px solid #334155;
+    }
+    .health-row:last-child { border-bottom: none; }
+    .health-label { color: #94a3b8; }
+    .health-value { font-weight: 600; }
+    .dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 6px;
+    }
+    .dot-green { background: #4ade80; }
+    .dot-red { background: #f87171; }
+    .dot-yellow { background: #facc15; }
+    #health-panel {
+      background: #0f172a;
+      border-radius: 6px;
+      padding: 8px 12px;
+      margin-bottom: 12px;
+    }
+  </style>
+</head>
+<body>
+  <h2>🕐 Broker-Client Clock Demo</h2>
+  <div id="health-panel">
+    <div class="health-row">
+      <span class="health-label">MCP Server</span>
+      <span class="health-value" id="health-http"><span class="dot dot-yellow"></span>checking...</span>
+    </div>
+    <div class="health-row">
+      <span class="health-label">Clock Page</span>
+      <span class="health-value" id="health-clock"><span class="dot dot-yellow"></span>checking...</span>
+    </div>
+  </div>
+  <button id="open-clock">Open Clock Page</button>
+  <button id="inject-rc">⚡ Inject Broker-Client</button>
+  <div id="status">Auto-inject is enabled on page load</div>
+  <div id="tools-section">
+    <h3>🔧 MCP Tools <button id="refresh-tools">↻ Refresh</button></h3>
+    <div id="tools-container"><span id="tools-loading">Loading tools...</span></div>
+  </div>
+  <script src="mcp-browser-client.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

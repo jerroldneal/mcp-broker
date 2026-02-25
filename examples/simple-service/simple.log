@@ -1,0 +1,14 @@
+[reverse-client:simple-service] Registered as "simple-service" with 3 tool(s)
+simple-service running. Press Ctrl+C to stop.
+Chat tool called with prompt: What is 3+3? Answer with just the number.
+[reverse-client:simple-service] Disconnected. Reconnecting in 3000ms...
+[reverse-client:simple-service] WebSocket error: connect ECONNREFUSED ::1:3099
+[reverse-client:simple-service] Disconnected. Reconnecting in 6000ms...
+[reverse-client:simple-service] Registered as "simple-service" with 3 tool(s)
+Chat tool called with prompt: What is 3+3? Answer with just the number.
+Chat tool called with prompt: What is 2+2? Reply with just the number.
+[reverse-client:simple-service] Disconnected. Reconnecting in 3000ms...
+[reverse-client:simple-service] WebSocket error: connect ECONNREFUSED ::1:3099
+[reverse-client:simple-service] Disconnected. Reconnecting in 6000ms...
+[reverse-client:simple-service] Registered as "simple-service" with 3 tool(s)
+Chat tool called with prompt: What is 2+2? Reply with just the number.

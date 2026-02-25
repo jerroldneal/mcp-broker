@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MCP Broker — Dashboard</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #232733;
+    --border: #2d3140;
+    --text: #e4e6f0;
+    --text-dim: #8b8fa3;
+    --accent: #6c8cff;
+    --accent-dim: #4a5a8a;
+    --green: #4ade80;
+    --green-dim: #1a3a2a;
+    --red: #f87171;
+    --red-dim: #3a1a1a;
+    --yellow: #fbbf24;
+    --yellow-dim: #3a2e1a;
+    --cyan: #22d3ee;
+    --purple: #a78bfa;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+  }
+
+  /* ── Header ── */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  header h1 {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  header h1 span {
+    color: var(--accent);
+  }
+
+  .connection-badge {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+
+  .connection-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--red);
+    transition: background 0.3s;
+  }
+
+  .connection-dot.connected { background: var(--green); }
+
+  /* ── Layout ── */
+  .container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* ── Stat Cards ── */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+  }
+
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .stat-label {
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: var(--text-dim);
+    margin-bottom: 6px;
+  }
+
+  .stat-value {
+    font-size: 28px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .stat-value.green { color: var(--green); }
+  .stat-value.accent { color: var(--accent); }
+  .stat-value.yellow { color: var(--yellow); }
+  .stat-value.red { color: var(--red); }
+  .stat-value.cyan { color: var(--cyan); }
+
+  .stat-sub {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+
+  /* ── Panels ── */
+  .panels {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+
+  @media (max-width: 900px) {
+    .panels { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .panel-header {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .panel-title {
+    font-size: 14px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .panel-badge {
+    background: var(--accent-dim);
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+
+  .panel-body {
+    padding: 0;
+    overflow-y: auto;
+    max-height: 420px;
+    flex: 1;
+  }
+
+  .panel-body.padded {
+    padding: 16px 20px;
+  }
+
+  /* ── Clients List ── */
+  .client-item {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    transition: background 0.15s;
+  }
+
+  .client-item:last-child { border-bottom: none; }
+  .client-item:hover { background: var(--surface2); }
+
+  .client-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+  }
+
+  .client-id {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--cyan);
+  }
+
+  .client-since {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-left: auto;
+  }
+
+  .tool-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .tool-chip {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-size: 12px;
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+  }
+
+  .tool-chip .desc {
+    color: var(--text-dim);
+    font-family: 'Segoe UI', sans-serif;
+    margin-left: 4px;
+  }
+
+  /* ── Activity Log ── */
+  .activity-item {
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 13px;
+    transition: background 0.15s;
+  }
+
+  .activity-item:last-child { border-bottom: none; }
+  .activity-item:hover { background: var(--surface2); }
+
+  .activity-time {
+    color: var(--text-dim);
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 11px;
+    flex-shrink: 0;
+    min-width: 80px;
+    padding-top: 1px;
+  }
+
+  .activity-icon {
+    flex-shrink: 0;
+    width: 20px;
+    text-align: center;
+    font-size: 14px;
+  }
+
+  .activity-msg {
+    color: var(--text);
+    word-break: break-word;
+  }
+
+  .activity-msg code {
+    background: var(--surface2);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 12px;
+  }
+
+  /* ── Empty States ── */
+  .empty-state {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 14px;
+  }
+
+  .empty-state .icon {
+    font-size: 32px;
+    margin-bottom: 8px;
+  }
+
+  /* ── Full-width panel ── */
+  .panel.full-width {
+    grid-column: 1 / -1;
+  }
+
+  /* ── Toolbar buttons ── */
+  .panel-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .btn-sm {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .btn-sm:hover {
+    background: var(--border);
+    color: var(--text);
+  }
+
+  /* ── Tool call detail overlay ── */
+  .detail-row {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-top: 4px;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    word-break: break-all;
+  }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+  /* ── Animation ── */
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .fade-in { animation: fadeIn 0.2s ease-out; }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+  .pulse { animation: pulse 2s ease-in-out infinite; }
+</style>
+</head>
+<body>
+<header>
+  <h1><span>MCP</span> Broker</h1>
+  <div class="connection-badge">
+    <div id="sse-dot" class="connection-dot"></div>
+    <span id="sse-label">Connecting...</span>
+  </div>
+</header>
+
+<div class="container">
+  <!-- Stats -->
+  <div class="stats-grid" id="stats-grid">
+    <div class="stat-card">
+      <div class="stat-label">Uptime</div>
+      <div class="stat-value accent" id="stat-uptime">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Connected Clients</div>
+      <div class="stat-value green" id="stat-clients">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Tools</div>
+      <div class="stat-value cyan" id="stat-tools">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Tool Calls</div>
+      <div class="stat-value yellow" id="stat-tool-calls">0</div>
+      <div class="stat-sub" id="stat-tool-errors"></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Chat Requests</div>
+      <div class="stat-value purple" id="stat-chat">0</div>
+      <div class="stat-sub" id="stat-chat-errors"></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Connections</div>
+      <div class="stat-value" id="stat-total-conn">0</div>
+      <div class="stat-sub">since server start</div>
+    </div>
+  </div>
+
+  <!-- Panels -->
+  <div class="panels">
+    <!-- Clients Panel -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">
+          Connected Clients
+          <span class="panel-badge" id="clients-badge">0</span>
+        </div>
+      </div>
+      <div class="panel-body" id="clients-body">
+        <div class="empty-state">
+          <div class="icon">📡</div>
+          No broker-clients connected
+        </div>
+      </div>
+    </div>
+
+    <!-- Activity Log -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="panel-title">
+          Activity Log
+          <span class="panel-badge" id="activity-badge">0</span>
+        </div>
+        <div class="panel-actions">
+          <button class="btn-sm" onclick="toggleAutoScroll()">Auto-scroll: <span id="autoscroll-label">ON</span></button>
+          <button class="btn-sm" onclick="clearLog()">Clear</button>
+        </div>
+      </div>
+      <div class="panel-body" id="activity-body">
+        <div class="empty-state">
+          <div class="icon">📋</div>
+          No activity yet
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tools Panel (full width) -->
+  <div class="panel full-width">
+    <div class="panel-header">
+      <div class="panel-title">
+        Tool Registry
+        <span class="panel-badge" id="tools-badge">0</span>
+      </div>
+    </div>
+    <div class="panel-body" id="tools-body">
+      <div class="empty-state">
+        <div class="icon">🔧</div>
+        No tools registered
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  // ── State ──
+  let autoScroll = true;
+  let activityCount = 0;
+  let displayedActivities = [];
+
+  // ── Elements ──
+  const $sseDot = document.getElementById('sse-dot');
+  const $sseLabel = document.getElementById('sse-label');
+  const $statUptime = document.getElementById('stat-uptime');
+  const $statClients = document.getElementById('stat-clients');
+  const $statTools = document.getElementById('stat-tools');
+  const $statToolCalls = document.getElementById('stat-tool-calls');
+  const $statToolErrors = document.getElementById('stat-tool-errors');
+  const $statChat = document.getElementById('stat-chat');
+  const $statChatErrors = document.getElementById('stat-chat-errors');
+  const $statTotalConn = document.getElementById('stat-total-conn');
+  const $clientsBadge = document.getElementById('clients-badge');
+  const $clientsBody = document.getElementById('clients-body');
+  const $activityBadge = document.getElementById('activity-badge');
+  const $activityBody = document.getElementById('activity-body');
+  const $toolsBadge = document.getElementById('tools-badge');
+  const $toolsBody = document.getElementById('tools-body');
+
+  // ── Format uptime ──
+  function formatUptime(ms) {
+    const s = Math.floor(ms / 1000);
+    if (s < 60) return s + 's';
+    const m = Math.floor(s / 60);
+    if (m < 60) return m + 'm ' + (s % 60) + 's';
+    const h = Math.floor(m / 60);
+    if (h < 24) return h + 'h ' + (m % 60) + 'm';
+    const d = Math.floor(h / 24);
+    return d + 'd ' + (h % 24) + 'h';
+  }
+
+  function formatTime(isoStr) {
+    const d = new Date(isoStr);
+    return d.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+
+  function timeSince(isoStr) {
+    const ms = Date.now() - new Date(isoStr).getTime();
+    return formatUptime(ms);
+  }
+
+  // ── Activity icon map ──
+  const ACTIVITY_ICONS = {
+    connect: '🟢',
+    disconnect: '🔴',
+    tool_call: '🔧',
+    tool_result: '✅',
+    tool_error: '❌',
+    chat: '💬',
+    chat_error: '⚠️',
+  };
+
+  // ── Render: Stats ──
+  let lastUptime = 0;
+
+  function updateStats(state) {
+    lastUptime = state.uptime;
+    $statClients.textContent = state.connectedClients;
+    $statTools.textContent = state.totalTools;
+    $statToolCalls.textContent = state.stats.toolCalls;
+    $statToolErrors.textContent = state.stats.toolErrors > 0 ? state.stats.toolErrors + ' error(s)' : '';
+    $statChat.textContent = state.stats.chatRequests;
+    $statChatErrors.textContent = state.stats.chatErrors > 0 ? state.stats.chatErrors + ' error(s)' : '';
+    $statTotalConn.textContent = state.stats.totalConnections;
+  }
+
+  // Tick uptime display every second
+  setInterval(() => {
+    if (lastUptime > 0) {
+      lastUptime += 1000;
+      $statUptime.textContent = formatUptime(lastUptime);
+    }
+  }, 1000);
+
+  // ── Render: Clients ──
+  function renderClients(clients) {
+    $clientsBadge.textContent = clients.length;
+    if (clients.length === 0) {
+      $clientsBody.innerHTML = '<div class="empty-state"><div class="icon">📡</div>No broker-clients connected</div>';
+      return;
+    }
+
+    $clientsBody.innerHTML = clients.map(c => `
+      <div class="client-item fade-in">
+        <div class="client-header">
+          <span class="client-id">${esc(c.clientId)}</span>
+          <span class="client-since">connected ${timeSince(c.connectedAt)} ago</span>
+        </div>
+        <div class="tool-chips">
+          ${c.tools.map(t => `<span class="tool-chip">${esc(t.name)}${t.description ? '<span class="desc">— ' + esc(t.description) + '</span>' : ''}</span>`).join('')}
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // ── Render: Tools ──
+  function renderTools(clients) {
+    const allTools = [];
+    for (const c of clients) {
+      for (const t of c.tools) {
+        allTools.push({ clientId: c.clientId, name: t.name, description: t.description });
+      }
+    }
+    $toolsBadge.textContent = allTools.length;
+
+    if (allTools.length === 0) {
+      $toolsBody.innerHTML = '<div class="empty-state"><div class="icon">🔧</div>No tools registered</div>';
+      return;
+    }
+
+    let html = '<table style="width:100%;border-collapse:collapse;">';
+    html += '<tr style="border-bottom:1px solid var(--border);"><th style="text-align:left;padding:10px 20px;font-size:12px;color:var(--text-dim);font-weight:600;">Namespaced Name</th><th style="text-align:left;padding:10px 20px;font-size:12px;color:var(--text-dim);font-weight:600;">Client</th><th style="text-align:left;padding:10px 20px;font-size:12px;color:var(--text-dim);font-weight:600;">Tool</th><th style="text-align:left;padding:10px 20px;font-size:12px;color:var(--text-dim);font-weight:600;">Description</th></tr>';
+    for (const t of allTools) {
+      html += `<tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:10px 20px;font-family:'Cascadia Code','Fira Code',monospace;font-size:13px;color:var(--accent);">${esc(t.clientId)}__${esc(t.name)}</td>
+        <td style="padding:10px 20px;font-size:13px;color:var(--cyan);">${esc(t.clientId)}</td>
+        <td style="padding:10px 20px;font-size:13px;">${esc(t.name)}</td>
+        <td style="padding:10px 20px;font-size:13px;color:var(--text-dim);">${esc(t.description || '—')}</td>
+      </tr>`;
+    }
+    html += '</table>';
+    $toolsBody.innerHTML = html;
+  }
+
+  // ── Render: Activity Log ──
+  function addActivityEntry(entry) {
+    activityCount++;
+    displayedActivities.push(entry);
+    if (displayedActivities.length > 200) displayedActivities.shift();
+
+    $activityBadge.textContent = activityCount;
+
+    // Remove empty state if present
+    const empty = $activityBody.querySelector('.empty-state');
+    if (empty) empty.remove();
+
+    const div = document.createElement('div');
+    div.className = 'activity-item fade-in';
+    div.innerHTML = `
+      <span class="activity-time">${formatTime(entry.time)}</span>
+      <span class="activity-icon">${ACTIVITY_ICONS[entry.type] || '📌'}</span>
+      <span class="activity-msg">${escMsg(entry.message)}</span>
+    `;
+
+    $activityBody.appendChild(div);
+
+    // Limit DOM nodes
+    while ($activityBody.children.length > 200) {
+      $activityBody.removeChild($activityBody.firstChild);
+    }
+
+    if (autoScroll) {
+      $activityBody.scrollTop = $activityBody.scrollHeight;
+    }
+  }
+
+  function renderActivityBulk(entries) {
+    $activityBody.innerHTML = '';
+    displayedActivities = [];
+    activityCount = 0;
+    for (const entry of entries) {
+      addActivityEntry(entry);
+    }
+  }
+
+  // ── Escape helpers ──
+  function esc(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  function escMsg(str) {
+    // Escape HTML, then wrap quoted strings in <code>
+    let safe = esc(str);
+    safe = safe.replace(/&quot;([^&]+)&quot;/g, '<code>$1</code>');
+    return safe;
+  }
+
+  // ── Toggle auto-scroll ──
+  window.toggleAutoScroll = function() {
+    autoScroll = !autoScroll;
+    document.getElementById('autoscroll-label').textContent = autoScroll ? 'ON' : 'OFF';
+  };
+
+  window.clearLog = function() {
+    $activityBody.innerHTML = '<div class="empty-state"><div class="icon">📋</div>No activity yet</div>';
+    displayedActivities = [];
+    activityCount = 0;
+    $activityBadge.textContent = '0';
+  };
+
+  // ── SSE Connection ──
+  function connectSSE() {
+    const evtSource = new EventSource('/api/events');
+
+    evtSource.onopen = () => {
+      $sseDot.classList.add('connected');
+      $sseLabel.textContent = 'Live';
+    };
+
+    evtSource.onmessage = (event) => {
+      let data;
+      try { data = JSON.parse(event.data); } catch { return; }
+
+      if (data.type === 'state') {
+        updateStats(data);
+        renderClients(data.clients);
+        renderTools(data.clients);
+      } else if (data.type === 'activity') {
+        addActivityEntry(data.entry);
+      }
+    };
+
+    evtSource.onerror = () => {
+      $sseDot.classList.remove('connected');
+      $sseLabel.textContent = 'Reconnecting...';
+    };
+  }
+
+  // ── Initial Load ──
+  async function init() {
+    try {
+      // Fetch initial activity log
+      const actRes = await fetch('/api/activity');
+      if (actRes.ok) {
+        const entries = await actRes.json();
+        renderActivityBulk(entries);
+      }
+    } catch {}
+
+    // Start SSE (will also deliver initial state)
+    connectSSE();
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

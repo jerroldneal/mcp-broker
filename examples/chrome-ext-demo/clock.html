@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>MCP Broker-Client Clock</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    h1 {
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 3px;
+      color: #64748b;
+      margin-bottom: 8px;
+    }
+    #clock {
+      font-size: 72px;
+      font-weight: 200;
+      font-variant-numeric: tabular-nums;
+      color: #f8fafc;
+      margin-bottom: 32px;
+    }
+    #announce-btn {
+      padding: 14px 40px;
+      font-size: 16px;
+      font-weight: 600;
+      background: #3b82f6;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    #announce-btn:hover { background: #2563eb; }
+    #announce-btn:active { background: #1d4ed8; }
+    #announce-btn:disabled { background: #475569; cursor: not-allowed; }
+    #status {
+      margin-top: 16px;
+      font-size: 13px;
+      color: #94a3b8;
+      min-height: 20px;
+    }
+    #rc-status {
+      position: fixed;
+      top: 12px;
+      right: 16px;
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 12px;
+      background: #1e293b;
+    }
+    .rc-disconnected { color: #f87171; }
+    .rc-connected { color: #4ade80; }
+    #server-status {
+      position: fixed;
+      top: 12px;
+      left: 16px;
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 12px;
+      background: #1e293b;
+    }
+    .server-down { color: #f87171; }
+    .server-up { color: #4ade80; }
+    #tools-panel {
+      margin-top: 24px;
+      background: #1e293b;
+      border-radius: 8px;
+      padding: 12px 20px;
+      font-size: 13px;
+      min-width: 320px;
+      max-width: 500px;
+    }
+    #tools-panel h3 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: #64748b;
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    #refresh-tools {
+      font-size: 11px;
+      padding: 3px 10px;
+      background: #334155;
+      color: #94a3b8;
+      border: 1px solid #475569;
+      border-radius: 4px;
+      cursor: pointer;
+      text-transform: none;
+      letter-spacing: 0;
+      font-weight: 500;
+    }
+    #refresh-tools:hover { background: #475569; color: #e2e8f0; }
+    #tools-container {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .tool-btn {
+      display: block;
+      width: 100%;
+      padding: 8px 12px;
+      font-size: 13px;
+      font-weight: 500;
+      border: 1px solid #475569;
+      border-radius: 6px;
+      cursor: pointer;
+      background: #334155;
+      color: #e2e8f0;
+      text-align: left;
+      transition: background 0.15s;
+    }
+    .tool-btn:hover { background: #475569; }
+    .tool-btn:disabled { opacity: 0.5; cursor: wait; }
+    .tool-btn .tool-name { color: #a78bfa; font-weight: 600; font-family: monospace; }
+    .tool-btn .tool-desc {
+      display: block;
+      font-size: 11px;
+      color: #94a3b8;
+      margin-top: 2px;
+    }
+    .tool-result {
+      font-size: 12px;
+      color: #4ade80;
+      padding: 4px 12px;
+      word-break: break-all;
+    }
+    .tool-error {
+      font-size: 12px;
+      color: #f87171;
+      padding: 4px 12px;
+    }
+    #tools-empty { color: #475569; font-style: italic; }
+    #ollama-panel {
+      margin-top: 24px;
+      background: #1e293b;
+      border-radius: 8px;
+      padding: 12px 20px;
+      min-width: 320px;
+      max-width: 500px;
+      width: 100%;
+    }
+    #ollama-panel h3 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: #64748b;
+      margin-bottom: 8px;
+    }
+    #ollama-prompt {
+      width: 100%;
+      padding: 8px 12px;
+      font-size: 14px;
+      border-radius: 6px;
+      border: 1px solid #475569;
+      background: #0f172a;
+      color: #e2e8f0;
+      margin-bottom: 8px;
+      outline: none;
+    }
+    #ollama-prompt:focus { border-color: #3b82f6; }
+    #ollama-send {
+      padding: 8px 20px;
+      font-size: 13px;
+      font-weight: 600;
+      background: #8b5cf6;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.15s;
+      margin-bottom: 8px;
+    }
+    #ollama-send:hover { background: #7c3aed; }
+    #ollama-send:disabled { background: #475569; cursor: wait; }
+    #ollama-response {
+      width: 100%;
+      min-height: 80px;
+      padding: 8px 12px;
+      font-size: 13px;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      border-radius: 6px;
+      border: 1px solid #475569;
+      background: #0f172a;
+      color: #e2e8f0;
+      resize: vertical;
+    }
+    #ollama-status {
+      font-size: 12px;
+      color: #94a3b8;
+      margin-top: 4px;
+      min-height: 16px;
+    }
+
+    /* ── Tab Navigation ──────────────────────────────────────────── */
+    .tab-bar {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 24px;
+    }
+    .tab-btn {
+      padding: 8px 20px;
+      font-size: 13px;
+      font-weight: 600;
+      background: #1e293b;
+      color: #94a3b8;
+      border: 1px solid #334155;
+      border-radius: 6px 6px 0 0;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .tab-btn:hover { background: #334155; color: #e2e8f0; }
+    .tab-btn.active { background: #334155; color: #e2e8f0; border-bottom-color: #334155; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* ── Properties Panel ────────────────────────────────────────── */
+    #property-rc-status {
+      position: fixed;
+      top: 36px;
+      right: 16px;
+      font-size: 12px;
+      padding: 4px 10px;
+      border-radius: 12px;
+      background: #1e293b;
+    }
+    #properties-panel {
+      width: 100%;
+      max-width: 600px;
+    }
+    .prop-form {
+      background: #1e293b;
+      border-radius: 8px;
+      padding: 12px 20px;
+      margin-bottom: 16px;
+    }
+    .prop-form h3 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: #64748b;
+      margin-bottom: 10px;
+    }
+    .prop-form label {
+      font-size: 12px;
+      color: #94a3b8;
+      display: block;
+      margin-bottom: 4px;
+    }
+    .prop-input {
+      width: 100%;
+      padding: 8px 12px;
+      font-size: 14px;
+      border-radius: 6px;
+      border: 1px solid #475569;
+      background: #0f172a;
+      color: #e2e8f0;
+      margin-bottom: 10px;
+      outline: none;
+    }
+    .prop-input:focus { border-color: #3b82f6; }
+    #prop-tool-select {
+      width: 100%;
+      padding: 8px 12px;
+      font-size: 14px;
+      border-radius: 6px;
+      border: 1px solid #475569;
+      background: #0f172a;
+      color: #e2e8f0;
+      margin-bottom: 10px;
+      outline: none;
+    }
+    #prop-add-btn {
+      padding: 8px 20px;
+      font-size: 13px;
+      font-weight: 600;
+      background: #10b981;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    #prop-add-btn:hover { background: #059669; }
+    #prop-add-btn:disabled { background: #475569; cursor: wait; }
+    .prop-log {
+      background: #1e293b;
+      border-radius: 8px;
+      padding: 12px 20px;
+      margin-bottom: 16px;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    .prop-log h3 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: #64748b;
+      margin-bottom: 8px;
+    }
+    #prop-log-entries {
+      font-family: 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .log-entry { margin-bottom: 4px; }
+    .log-phase { color: #a78bfa; font-weight: 600; }
+    .log-detail { color: #94a3b8; }
+    .log-code { color: #4ade80; }
+    .log-error { color: #f87171; }
+    .prop-list {
+      background: #1e293b;
+      border-radius: 8px;
+      padding: 12px 20px;
+    }
+    .prop-list h3 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: #64748b;
+      margin-bottom: 8px;
+    }
+    .prop-item {
+      padding: 8px 0;
+      border-bottom: 1px solid #334155;
+    }
+    .prop-item:last-child { border-bottom: none; }
+    .prop-name { color: #a78bfa; font-weight: 600; font-family: monospace; }
+    .prop-value { color: #4ade80; font-family: monospace; }
+    .prop-prompt-text { color: #94a3b8; font-size: 12px; }
+    #prop-list-empty { color: #475569; font-style: italic; }
+  </style>
+</head>
+<body>
+  <div id="server-status" class="server-down">Server: checking...</div>
+  <div id="rc-status" class="rc-disconnected">RC: not injected</div>
+  <div id="property-rc-status" class="rc-disconnected">PropertyRC: not injected</div>
+
+  <div class="tab-bar">
+    <button class="tab-btn active" data-tab="clock-tab">Clock</button>
+    <button class="tab-btn" data-tab="properties-tab">Properties</button>
+  </div>
+
+  <!-- ── Clock Tab ──────────────────────────────────────────────── -->
+  <div id="clock-tab" class="tab-content active">
+    <h1>Pacific Standard Time</h1>
+    <div id="clock">--:--:-- --</div>
+    <button id="announce-btn">🔊 Announce Time</button>
+    <div id="status"></div>
+    <div id="ollama-panel">
+      <h3>Ollama Inference</h3>
+      <input id="ollama-prompt" type="text" placeholder="Ask the model something..." />
+      <button id="ollama-send">Send</button>
+      <textarea id="ollama-response" readonly placeholder="Response will appear here..."></textarea>
+      <div id="ollama-status"></div>
+    </div>
+    <div id="tools-panel">
+      <h3>Available MCP Tools <button id="refresh-tools">↻ Refresh</button></h3>
+      <div id="tools-container">
+        <span id="tools-empty">Connecting to server...</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Properties Tab ─────────────────────────────────────────── -->
+  <div id="properties-tab" class="tab-content">
+    <div id="properties-panel">
+      <div class="prop-form">
+        <h3>Add Property via AI</h3>
+        <label for="prop-tool-select">Tool (broker-client)</label>
+        <select id="prop-tool-select">
+          <option value="">Loading tools...</option>
+        </select>
+        <label for="prop-name-input">Property Name</label>
+        <input id="prop-name-input" class="prop-input" type="text" placeholder="e.g. pageTitle, buttonCount" />
+        <label for="prop-prompt-input">What should it return?</label>
+        <input id="prop-prompt-input" class="prop-input" type="text" placeholder="e.g. the main heading text on the page" />
+        <button id="prop-add-btn">⚡ Add Property</button>
+        <div id="prop-status" style="font-size:12px;color:#94a3b8;margin-top:8px;min-height:16px;"></div>
+      </div>
+      <div class="prop-log">
+        <h3>AI Conversation Log</h3>
+        <div id="prop-log-entries">
+          <span id="prop-log-empty" style="color:#475569;font-style:italic;">No activity yet. Add a property to see the iterative AI conversation.</span>
+        </div>
+      </div>
+      <div class="prop-list">
+        <h3>Resolved Properties</h3>
+        <div id="prop-list-container">
+          <span id="prop-list-empty">No properties yet</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="mcp-browser-client.js"></script>
+  <script src="clock.js"></script>
+</body>
+</html>
