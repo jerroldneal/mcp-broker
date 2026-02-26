@@ -41,7 +41,8 @@ const WS_PORT = parseInt(process.env.BROKER_WS_PORT || '3099', 10);
 const HTTP_PORT = parseInt(process.env.MCP_HTTP_PORT || '3098', 10);
 const TOOL_CALL_TIMEOUT_MS = 120_000;
 const OLLAMA_MCP_URL = process.env.OLLAMA_MCP_URL || 'http://localhost:3042/mcp';
-const DEFAULT_MODEL = process.env.OLLAMA_MODEL || 'qwen2.5:3b';
+// const DEFAULT_MODEL = process.env.OLLAMA_MODEL || 'qwen2.5:3b';
+const DEFAULT_MODEL = 'qwen2.5:3b';
 const ACTIVITY_LOG_MAX = 200;
 const NOTIFICATION_MAX_PER_CLIENT = 100;
 const NOTIFICATION_MAX_GLOBAL = 500;
@@ -316,7 +317,7 @@ async function proxyChat(ws, requestId, payload) {
       requestId,
       payload: {
         message: { role: 'assistant', content: text },
-        model: payload.model || DEFAULT_MODEL,
+        model: 'qwen2.5:3b', // payload.model || DEFAULT_MODEL,
       },
     }));
   } catch (err) {
