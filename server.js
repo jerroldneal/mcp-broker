@@ -254,6 +254,32 @@ wss.on('connection', (ws) => {
         break;
       }
 
+      case 'call_tool': {
+        // Broker-client requesting to call a tool (built-in or on another client)
+        const callId = msg.callId || crypto.randomBytes(8).toString('hex');
+        const toolName = msg.tool;
+        const toolArgs = msg.arguments || {};
+        if (!toolName) {
+          ws.send(JSON.stringify({ type: 'call_tool_result', callId, content: [{ type: 'text', text: 'tool name is required' }], isError: true }));
+          break;
+        }
+        (async () => {
+          try {
+            stats.toolCalls++;
+            addActivity('tool_call', `${assignedClientId} → ${toolName}`, { clientId: assignedClientId, tool: toolName, args: toolArgs });
+            const result = await routeToolCall(toolName, toolArgs);
+            addActivity('tool_result', `${toolName} returned`, { clientId: assignedClientId, tool: toolName, isError: result.isError });
+            if (result.isError) stats.toolErrors++;
+            ws.send(JSON.stringify({ type: 'call_tool_result', callId, content: result.content, isError: result.isError || false }));
+          } catch (err) {
+            stats.toolErrors++;
+            addActivity('tool_error', `${toolName} failed: ${err.message}`, { clientId: assignedClientId, tool: toolName });
+            ws.send(JSON.stringify({ type: 'call_tool_result', callId, content: [{ type: 'text', text: `Error: ${err.message}` }], isError: true }));
+          }
+        })();
+        break;
+      }
+
       default:
         ws.send(JSON.stringify({ type: 'error', message: `Unknown message type: ${msg.type}` }));
     }
@@ -333,6 +359,75 @@ async function proxyChat(ws, requestId, payload) {
 
 // ─── Tool Call Router ────────────────────────────────────────────────────────
 
+/**
+ * Route a tool call: check built-in tools first, then namespaced client tools.
+ * Used by both MCP HTTP and WebSocket call_tool paths.
+ */
+async function routeToolCall(name, args) {
+  // Built-in: list_broker_clients
+  if (name === 'list_broker_clients') {
+    const clients = [];
+    for (const [clientId, entry] of registry) {
+      clients.push({ clientId, tools: entry.tools.map(t => t.name) });
+    }
+    return { content: [{ type: 'text', text: JSON.stringify(clients, null, 2) }], isError: false };
+  }
+
+  // Built-in: get_notifications
+  if (name === 'get_notifications') {
+    const results = getNotifications(args?.clientId, args?.limit);
+    return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }], isError: false };
+  }
+
+  // Built-in: speak (forward to kokoro-tts)
+  if (name === 'speak') {
+    return await callProviderTool('kokoro-tts', 'speak', args);
+  }
+
+  // Built-in: speak_action (Ollama rephrase → TTS)
+  if (name === 'speak_action') {
+    const action = args?.action;
+    if (!action || typeof action !== 'string') {
+      return { content: [{ type: 'text', text: 'action string is required' }], isError: true };
+    }
+    let spokenText = action;
+    try {
+      const transport = new StreamableHTTPClientTransport(new URL(OLLAMA_MCP_URL));
+      const mcpClient = new Client(
+        { name: 'broker-speak-action', version: '1.0.0' },
+        { capabilities: {} }
+      );
+      await mcpClient.connect(transport);
+      const result = await mcpClient.callTool(
+        { name: 'request', arguments: {
+          prompt: action,
+          model: 'qwen2.5:3b',
+          system: 'You are a poker player announcing your action at the table. Rephrase the given poker action into a short, natural, first-person spoken phrase (5-10 words max). Be varied and casual. Examples: "I\'ll raise to six fifty", "Fold", "Call", "I\'m all in", "Bet four hundred", "I raise eight hundred". Output ONLY the spoken phrase, nothing else. No quotes, no explanation.'
+        }},
+        undefined,
+        { timeout: 15000 }
+      );
+      await mcpClient.close();
+      const text = result.content
+        ?.filter(c => c.type === 'text')
+        .map(c => c.text)
+        .join('')
+        .trim();
+      if (text && text.length > 0 && text.length < 100) spokenText = text;
+    } catch (err) {
+      log(`speak_action Ollama rephrase failed: ${err.message}, using raw action`);
+    }
+    return await callProviderTool('kokoro-tts', 'speak', { text: spokenText });
+  }
+
+  // Namespaced: clientId__toolName
+  const parsed = parseNamespacedTool(name);
+  if (!parsed) {
+    return { content: [{ type: 'text', text: `Unknown tool: ${name}` }], isError: true };
+  }
+  return await callProviderTool(parsed.clientId, parsed.toolName, args);
+}
+
 function callProviderTool(clientId, toolName, args) {
   return new Promise((resolve, reject) => {
     const entry = registry.get(clientId);
@@ -381,6 +476,30 @@ const BUILTIN_TOOLS = [
       },
     },
   },
+  {
+    name: 'speak',
+    description: 'Convert text to speech and play through speakers. Forwards to the kokoro-tts broker-client.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: 'The text to convert to speech' },
+        voice: { type: 'string', description: 'Voice ID (e.g. af_heart, am_adam). Use kokoro-tts__list_voices to see all options.' },
+        speed: { type: 'number', description: 'Speed of speech (default: 1.0, range: 0.5-2.0)' },
+      },
+      required: ['text'],
+    },
+  },
+  {
+    name: 'speak_action',
+    description: 'Rephrase a poker action into natural speech using AI, then speak it aloud. Use this when announcing game actions.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        action: { type: 'string', description: 'The poker action to announce (e.g. "Raise 650", "Fold", "All-In: 5,000")' },
+      },
+      required: ['action'],
+    },
+  },
 ];
 
 function createMcpServer() {
@@ -408,44 +527,16 @@ function createMcpServer() {
   mcpServer.setRequestHandler(CallToolRequestSchema, async (request) => {
     const { name, arguments: args } = request.params;
 
-    if (name === 'list_broker_clients') {
-      const clients = [];
-      for (const [clientId, entry] of registry) {
-        clients.push({
-          clientId,
-          tools: entry.tools.map((t) => t.name),
-        });
-      }
-      return {
-        content: [{ type: 'text', text: JSON.stringify(clients, null, 2) }],
-      };
-    }
-
-    if (name === 'get_notifications') {
-      const results = getNotifications(args?.clientId, args?.limit);
-      return {
-        content: [{ type: 'text', text: JSON.stringify(results, null, 2) }],
-      };
-    }
-
-    const parsed = parseNamespacedTool(name);
-    if (!parsed) {
-      return {
-        content: [{ type: 'text', text: `Unknown tool: ${name}` }],
-        isError: true,
-      };
-    }
-
     try {
       stats.toolCalls++;
-      addActivity('tool_call', `${name} called`, { clientId: parsed.clientId, tool: parsed.toolName, args });
-      const result = await callProviderTool(parsed.clientId, parsed.toolName, args);
-      addActivity('tool_result', `${name} returned`, { clientId: parsed.clientId, tool: parsed.toolName, isError: result.isError });
+      addActivity('tool_call', `${name} called`, { tool: name, args });
+      const result = await routeToolCall(name, args);
+      addActivity('tool_result', `${name} returned`, { tool: name, isError: result.isError });
       if (result.isError) stats.toolErrors++;
       return result;
     } catch (err) {
       stats.toolErrors++;
-      addActivity('tool_error', `${name} failed: ${err.message}`, { clientId: parsed.clientId, tool: parsed.toolName });
+      addActivity('tool_error', `${name} failed: ${err.message}`, { tool: name });
       return {
         content: [{ type: 'text', text: `Error: ${err.message}` }],
         isError: true,
@@ -534,6 +625,52 @@ app.get('/api/events', (req, res) => {
 
   sseClients.add(res);
   req.on('close', () => sseClients.delete(res));
+});
+
+// ─── Speak Action (Ollama rephrase → TTS) ────────────────────────────────────
+
+app.post('/api/speak-action', async (req, res) => {
+  const { action } = req.body || {};
+  if (!action || typeof action !== 'string') {
+    return res.status(400).json({ error: 'action string is required' });
+  }
+
+  // Use Ollama to rephrase into natural poker speech
+  let spokenText = action;
+  try {
+    const transport = new StreamableHTTPClientTransport(new URL(OLLAMA_MCP_URL));
+    const mcpClient = new Client(
+      { name: 'broker-speak-action', version: '1.0.0' },
+      { capabilities: {} }
+    );
+    await mcpClient.connect(transport);
+    const result = await mcpClient.callTool(
+      { name: 'request', arguments: {
+        prompt: action,
+        model: 'qwen2.5:3b',
+        system: 'You are a poker player announcing your action at the table. Rephrase the given poker action into a short, natural, first-person spoken phrase (5-10 words max). Be varied and casual. Examples: "I\'ll raise to six fifty", "Fold", "Call", "I\'m all in", "Bet four hundred", "I raise eight hundred". Output ONLY the spoken phrase, nothing else. No quotes, no explanation.'
+      }},
+      undefined,
+      { timeout: 15000 }
+    );
+    await mcpClient.close();
+    const text = result.content
+      ?.filter(c => c.type === 'text')
+      .map(c => c.text)
+      .join('')
+      .trim();
+    if (text && text.length > 0 && text.length < 100) spokenText = text;
+  } catch (err) {
+    log(`speak-action Ollama rephrase failed: ${err.message}, using raw action`);
+  }
+
+  // Forward to TTS
+  try {
+    const ttsResult = await callProviderTool('kokoro-tts', 'speak', { text: spokenText });
+    res.json({ spoken: spokenText, tts: ttsResult.content, isError: ttsResult.isError || false });
+  } catch (err) {
+    res.status(500).json({ error: err.message, spoken: spokenText });
+  }
 });
 
 // ─── Start ───────────────────────────────────────────────────────────────────
