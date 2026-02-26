@@ -27,8 +27,6 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { WebSocketServer } from 'ws';
 import express from 'express';
 import crypto from 'crypto';
@@ -40,8 +38,7 @@ import { dirname, join } from 'path';
 const WS_PORT = parseInt(process.env.BROKER_WS_PORT || '3099', 10);
 const HTTP_PORT = parseInt(process.env.MCP_HTTP_PORT || '3098', 10);
 const TOOL_CALL_TIMEOUT_MS = 120_000;
-const OLLAMA_MCP_URL = process.env.OLLAMA_MCP_URL || 'http://localhost:3042/mcp';
-// const DEFAULT_MODEL = process.env.OLLAMA_MODEL || 'qwen2.5:3b';
+const OLLAMA_API_URL = process.env.OLLAMA_API_URL || 'http://localhost:11434';
 const DEFAULT_MODEL = 'qwen2.5:3b';
 const ACTIVITY_LOG_MAX = 200;
 const NOTIFICATION_MAX_PER_CLIENT = 100;
@@ -304,46 +301,22 @@ wss.on('connection', (ws) => {
 
 async function proxyChat(ws, requestId, payload) {
   try {
-    // Convert chat messages to MCP tool arguments
     const messages = payload.messages || [];
     const systemMsg = messages.find(m => m.role === 'system');
     const userMessages = messages.filter(m => m.role !== 'system');
     const prompt = userMessages.map(m => m.content).join('\n') || payload.prompt || '';
 
-    const toolArgs = { prompt };
-    toolArgs.model = payload.model || DEFAULT_MODEL;
-    if (systemMsg) toolArgs.system = systemMsg.content;
+    const text = await ollamaGenerate(prompt, {
+      model: payload.model || DEFAULT_MODEL,
+      system: systemMsg?.content,
+    });
 
-    // Connect to Ollama MCP server using SDK's StreamableHTTPClientTransport
-    const transport = new StreamableHTTPClientTransport(new URL(OLLAMA_MCP_URL));
-    const mcpClient = new Client(
-      { name: 'broker-chat-proxy', version: '1.0.0' },
-      { capabilities: {} }
-    );
-
-    await mcpClient.connect(transport);
-
-    const result = await mcpClient.callTool(
-      { name: 'request', arguments: toolArgs },
-      undefined,
-      { timeout: 120000 }  // 120s timeout for inference
-    );
-
-    await mcpClient.close();
-
-    // Extract text content from MCP result
-    const text = result.content
-      ?.filter(c => c.type === 'text' && !c.isError)
-      .map(c => c.text)
-      .join('\n') || '';
-
-    // Return in Ollama-compatible chat response format
     ws.send(JSON.stringify({
       type: 'chat_response',
       requestId,
       payload: {
         message: { role: 'assistant', content: text },
-        model: 'qwen2.5:3b', // payload.model || DEFAULT_MODEL,
+        model: payload.model || DEFAULT_MODEL,
       },
     }));
   } catch (err) {
@@ -355,6 +328,23 @@ async function proxyChat(ws, requestId, payload) {
       error: `Ollama MCP proxy failed: ${err.message}`,
     }));
   }
+}
+
+// ─── Direct Ollama REST API ──────────────────────────────────────────────────
+
+/**
+ * Direct Ollama REST API call — bypasses MCP intermediary.
+ * Returns the response text from Ollama.
+ */
+async function ollamaGenerate(prompt, { model, system } = {}) {
+  const res = await fetch(`${OLLAMA_API_URL}/api/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: model || DEFAULT_MODEL, prompt, system, stream: false }),
+  });
+  if (!res.ok) throw new Error(`Ollama returned ${res.status}`);
+  const data = await res.json();
+  return data.response || '';
 }
 
 // ─── Tool Call Router ────────────────────────────────────────────────────────
@@ -379,12 +369,16 @@ async function routeToolCall(name, args) {
     return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }], isError: false };
   }
 
-  // Built-in: speak (forward to kokoro-tts)
+  // Built-in: speak (via kokoro-tts broker-client WebSocket)
   if (name === 'speak') {
-    return await callProviderTool('kokoro-tts', 'speak', args);
+    try {
+      return await callProviderTool('kokoro-tts', 'speak', args);
+    } catch (err) {
+      return { content: [{ type: 'text', text: `speak failed: ${err.message}` }], isError: true };
+    }
   }
 
-  // Built-in: speak_action (Ollama rephrase → TTS)
+  // Built-in: speak_action (Ollama rephrase → TTS, both via direct HTTP)
   if (name === 'speak_action') {
     const action = args?.action;
     if (!action || typeof action !== 'string') {
@@ -392,32 +386,44 @@ async function routeToolCall(name, args) {
     }
     let spokenText = action;
     try {
-      const transport = new StreamableHTTPClientTransport(new URL(OLLAMA_MCP_URL));
-      const mcpClient = new Client(
-        { name: 'broker-speak-action', version: '1.0.0' },
-        { capabilities: {} }
-      );
-      await mcpClient.connect(transport);
-      const result = await mcpClient.callTool(
-        { name: 'request', arguments: {
-          prompt: action,
-          model: 'qwen2.5:3b',
-          system: 'You are a poker player announcing your action at the table. Rephrase the given poker action into a short, natural, first-person spoken phrase (5-10 words max). Be varied and casual. Examples: "I\'ll raise to six fifty", "Fold", "Call", "I\'m all in", "Bet four hundred", "I raise eight hundred". Output ONLY the spoken phrase, nothing else. No quotes, no explanation.'
-        }},
-        undefined,
-        { timeout: 15000 }
-      );
-      await mcpClient.close();
-      const text = result.content
-        ?.filter(c => c.type === 'text')
-        .map(c => c.text)
-        .join('')
-        .trim();
-      if (text && text.length > 0 && text.length < 100) spokenText = text;
+      const text = await ollamaGenerate(action, {
+        model: 'qwen2.5:3b',
+        system: 'You are a poker player announcing your action at the table. Rephrase the given poker action into a short, natural, first-person spoken phrase (5-10 words max). Be varied and casual. Examples: "I\'ll raise to six fifty", "Fold", "Call", "I\'m all in", "Bet four hundred", "I raise eight hundred". Output ONLY the spoken phrase, nothing else. No quotes, no explanation.'
+      });
+      if (text && text.length > 0 && text.length < 100) spokenText = text.trim();
     } catch (err) {
       log(`speak_action Ollama rephrase failed: ${err.message}, using raw action`);
     }
-    return await callProviderTool('kokoro-tts', 'speak', { text: spokenText });
+    try {
+      return await callProviderTool('kokoro-tts', 'speak', { text: spokenText });
+    } catch (err) {
+      return { content: [{ type: 'text', text: `speak failed: ${err.message}` }], isError: true };
+    }
+  }
+
+  // Built-in: ask_ai (direct HTTP to Ollama MCP, optional TTS)
+  if (name === 'ask_ai') {
+    const prompt = args?.prompt;
+    if (!prompt || typeof prompt !== 'string') {
+      return { content: [{ type: 'text', text: 'prompt string is required' }], isError: true };
+    }
+    try {
+      const text = await ollamaGenerate(
+        args?.system ? `${args.system}\n\n${prompt}` : prompt,
+        { model: args?.model || DEFAULT_MODEL },
+      );
+      if (args?.speak && text) {
+        try {
+          await callProviderTool('kokoro-tts', 'speak', { text });
+        } catch (speakErr) {
+          log(`ask_ai speak failed: ${speakErr.message}`);
+        }
+      }
+      return { content: [{ type: 'text', text: text || '(no response)' }], isError: false };
+    } catch (err) {
+      log(`ask_ai failed: ${err.message}`);
+      return { content: [{ type: 'text', text: `AI error: ${err.message}` }], isError: true };
+    }
   }
 
   // Namespaced: clientId__toolName
@@ -498,6 +504,20 @@ const BUILTIN_TOOLS = [
         action: { type: 'string', description: 'The poker action to announce (e.g. "Raise 650", "Fold", "All-In: 5,000")' },
       },
       required: ['action'],
+    },
+  },
+  {
+    name: 'ask_ai',
+    description: 'Ask the AI a question and get a text response. Optionally speak the answer aloud. Any tiny client can use this for intelligence without local resources.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        prompt: { type: 'string', description: 'The question or prompt to send to the AI' },
+        system: { type: 'string', description: 'System prompt to guide behavior (optional)' },
+        model: { type: 'string', description: `Model to use (default: ${DEFAULT_MODEL})` },
+        speak: { type: 'boolean', description: 'Whether to speak the response aloud (default: false)' },
+      },
+      required: ['prompt'],
     },
   },
 ];
@@ -638,28 +658,11 @@ app.post('/api/speak-action', async (req, res) => {
   // Use Ollama to rephrase into natural poker speech
   let spokenText = action;
   try {
-    const transport = new StreamableHTTPClientTransport(new URL(OLLAMA_MCP_URL));
-    const mcpClient = new Client(
-      { name: 'broker-speak-action', version: '1.0.0' },
-      { capabilities: {} }
-    );
-    await mcpClient.connect(transport);
-    const result = await mcpClient.callTool(
-      { name: 'request', arguments: {
-        prompt: action,
-        model: 'qwen2.5:3b',
-        system: 'You are a poker player announcing your action at the table. Rephrase the given poker action into a short, natural, first-person spoken phrase (5-10 words max). Be varied and casual. Examples: "I\'ll raise to six fifty", "Fold", "Call", "I\'m all in", "Bet four hundred", "I raise eight hundred". Output ONLY the spoken phrase, nothing else. No quotes, no explanation.'
-      }},
-      undefined,
-      { timeout: 15000 }
-    );
-    await mcpClient.close();
-    const text = result.content
-      ?.filter(c => c.type === 'text')
-      .map(c => c.text)
-      .join('')
-      .trim();
-    if (text && text.length > 0 && text.length < 100) spokenText = text;
+    const text = await ollamaGenerate(action, {
+      model: 'qwen2.5:3b',
+      system: 'You are a poker player announcing your action at the table. Rephrase the given poker action into a short, natural, first-person spoken phrase (5-10 words max). Be varied and casual. Examples: "I\'ll raise to six fifty", "Fold", "Call", "I\'m all in", "Bet four hundred", "I raise eight hundred". Output ONLY the spoken phrase, nothing else. No quotes, no explanation.'
+    });
+    if (text && text.length > 0 && text.length < 100) spokenText = text.trim();
   } catch (err) {
     log(`speak-action Ollama rephrase failed: ${err.message}, using raw action`);
   }
