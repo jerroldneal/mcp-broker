@@ -1,5 +1,7 @@
 # MCP Broker
 
+> **Repo**: [`jerroldneal/mcp-broker`](https://github.com/jerroldneal/mcp-broker) · **Submodule of**: [`chrome-native-relay`](https://github.com/jerroldneal/chrome-native-relay) at `mcp-broker/`
+
 An MCP server that acts as a **tool-routing broker** — tool providers connect outbound via WebSocket and publish tools, while standard MCP clients consume them transparently through the broker.
 
 ## How It Works
