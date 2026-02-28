@@ -619,16 +619,28 @@ app.get('/api/activity', (_req, res) => {
 
 app.post('/api/call-tool', async (req, res) => {
   const { clientId, tool, arguments: args } = req.body || {};
-  if (!clientId || !tool) {
-    return res.status(400).json({ error: 'clientId and tool are required' });
-  }
-  const entry = registry.get(clientId);
-  if (!entry) {
-    return res.status(404).json({ error: `Client "${clientId}" not connected` });
+  if (!tool) {
+    return res.status(400).json({ error: 'tool is required' });
   }
   const start = Date.now();
   try {
-    const result = await callProviderTool(clientId, tool, args || {});
+    let result;
+    const parsed = parseNamespacedTool(tool);
+    if (parsed || BUILTIN_TOOLS.some(b => b.name === tool)) {
+      // Namespaced tool (e.g. kokoro-tts__preview_voice) or built-in tool:
+      // always route through routeToolCall which handles both.
+      result = await routeToolCall(tool, args || {});
+    } else if (clientId) {
+      // Plain tool name with explicit clientId (broker dashboard path):
+      // call the tool directly on the specified client.
+      const entry = registry.get(clientId);
+      if (!entry) {
+        return res.status(404).json({ error: `Client "${clientId}" not connected` });
+      }
+      result = await callProviderTool(clientId, tool, args || {});
+    } else {
+      return res.status(400).json({ error: `Unknown tool: ${tool}` });
+    }
     res.json({ content: result.content, isError: result.isError || false, duration: Date.now() - start });
   } catch (err) {
     res.status(500).json({ error: err.message, duration: Date.now() - start });
