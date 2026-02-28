@@ -204,6 +204,21 @@
     margin-left: auto;
   }
 
+  .tree-client-link {
+    font-size: 12px;
+    color: var(--accent);
+    text-decoration: none;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: background 0.15s, color 0.15s;
+    flex-shrink: 0;
+  }
+
+  .tree-client-link:hover {
+    background: var(--accent-dim);
+    color: #fff;
+  }
+
   .tree-client-dot {
     width: 6px;
     height: 6px;
@@ -820,6 +835,7 @@
             <span class="tree-client-dot"></span>
             <span class="tree-client-name">${esc(c.clientId)}</span>
             <span class="tree-client-count">${c.tools.length} tool${c.tools.length !== 1 ? 's' : ''}</span>
+            <a class="tree-client-link" href="/client/${encodeURIComponent(c.clientId)}" target="_blank" title="Open ${esc(c.clientId)} dashboard" onclick="event.stopPropagation()">↗</a>
           </div>
           <div class="tree-tools ${isOpen ? 'open' : ''}">
             ${c.tools.map(t => {

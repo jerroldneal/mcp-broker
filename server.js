@@ -32,12 +32,13 @@ import express from 'express';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { generateClientDashboard } from './client-dashboard.js';
 
 // ─── Configuration ───────────────────────────────────────────────────────────
 
 const WS_PORT = parseInt(process.env.BROKER_WS_PORT || '3099', 10);
 const HTTP_PORT = parseInt(process.env.MCP_HTTP_PORT || '3098', 10);
-const TOOL_CALL_TIMEOUT_MS = 120_000;
+const TOOL_CALL_TIMEOUT_MS = 300_000;
 const OLLAMA_API_URL = process.env.OLLAMA_API_URL || 'http://localhost:11434';
 const DEFAULT_MODEL = 'qwen2.5:3b';
 const ACTIVITY_LOG_MAX = 200;
@@ -192,7 +193,7 @@ wss.on('connection', (ws) => {
         log(`Registered broker-client "${clientId}" with ${tools.length} tool(s)`);
         addActivity('connect', `"${clientId}" registered with ${tools.length} tool(s)`, { clientId, tools: tools.map(t => t.name) });
         broadcastState();
-        ws.send(JSON.stringify({ type: 'registered', clientId }));
+        ws.send(JSON.stringify({ type: 'registered', clientId, dashboardUrl: `http://localhost:${HTTP_PORT}/client/${clientId}` }));
         break;
       }
 
@@ -643,6 +644,72 @@ app.get('/api/events', (req, res) => {
   // Send current state immediately
   res.write(`data: ${JSON.stringify({ type: 'state', ...buildStatusSnapshot() })}\n\n`);
 
+  sseClients.add(res);
+  req.on('close', () => sseClients.delete(res));
+});
+
+// ─── Per-Client Dashboard ─────────────────────────────────────────────────────
+
+app.get('/client/:clientId', (req, res) => {
+  const { clientId } = req.params;
+  const entry = registry.get(clientId);
+  const clientData = entry
+    ? { tools: entry.tools, connectedAt: entry.connectedAt }
+    : { tools: [], connectedAt: '' };
+
+  // Compute available tools: built-in + tools from other connected clients
+  const availableTools = [...BUILTIN_TOOLS];
+  for (const [cid, e] of registry) {
+    if (cid === clientId) continue;
+    for (const t of e.tools) {
+      availableTools.push({
+        name: namespacedTool(cid, t.name),
+        description: `[${cid}] ${t.description || ''}`,
+        inputSchema: t.inputSchema || { type: 'object', properties: {} },
+      });
+    }
+  }
+
+  const html = generateClientDashboard(clientId, clientData, {
+    host: req.headers.host || `localhost:${HTTP_PORT}`,
+    activityLog,
+    notifications: getNotifications(clientId),
+    stats,
+    availableTools,
+  });
+  res.type('html').send(html);
+});
+
+app.get('/api/client/:clientId/status', (req, res) => {
+  const { clientId } = req.params;
+  const entry = registry.get(clientId);
+  if (!entry) return res.status(404).json({ error: `Client "${clientId}" not connected` });
+  res.json({
+    clientId,
+    connectedAt: entry.connectedAt,
+    tools: entry.tools.map(t => ({ name: t.name, description: t.description || '', inputSchema: t.inputSchema || {} })),
+    notifications: getNotifications(clientId),
+    uptime: Date.now() - serverStartedAt,
+  });
+});
+
+app.get('/api/client/:clientId/activity', (req, res) => {
+  const { clientId } = req.params;
+  const filtered = activityLog.filter(a => a.data && a.data.clientId === clientId);
+  res.json(filtered);
+});
+
+app.get('/api/client/:clientId/events', (req, res) => {
+  const { clientId } = req.params;
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  // Send current state immediately
+  res.write(`data: ${JSON.stringify({ type: 'state', ...buildStatusSnapshot() })}\n\n`);
+
+  // Reuse main SSE set — client-side JS filters by clientId
   sseClients.add(res);
   req.on('close', () => sseClients.delete(res));
 });
