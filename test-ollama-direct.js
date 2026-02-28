@@ -2,7 +2,7 @@
 import http from 'http';
 
 const data = JSON.stringify({
-  model: 'qwen2.5:0.5b',
+  model: 'qwen2.5:3b',
   prompt: 'What is 2+2? Answer with just the number.',
   stream: false,
 });
