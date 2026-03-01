@@ -33,6 +33,7 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { generateClientDashboard } from './client-dashboard.js';
+import { BrokerClient } from '../mcp-broker-client/sdk.js';
 
 // ─── Configuration ───────────────────────────────────────────────────────────
 
@@ -40,7 +41,7 @@ const WS_PORT = parseInt(process.env.BROKER_WS_PORT || '3099', 10);
 const HTTP_PORT = parseInt(process.env.MCP_HTTP_PORT || '3098', 10);
 const TOOL_CALL_TIMEOUT_MS = 300_000;
 const OLLAMA_API_URL = process.env.OLLAMA_API_URL || 'http://localhost:11434';
-const DEFAULT_MODEL = 'qwen2.5:3b';
+const DEFAULT_MODEL = process.env.OLLAMA_MODEL || 'qwen2.5:1.5b';
 const ACTIVITY_LOG_MAX = 200;
 const NOTIFICATION_MAX_PER_CLIENT = 100;
 const NOTIFICATION_MAX_GLOBAL = 500;
@@ -755,6 +756,88 @@ app.post('/api/speak-action', async (req, res) => {
   }
 });
 
+// ─── Ask AI Streaming (tokens arrive in real-time) ────────────────────────────
+
+app.post('/api/ask-stream', async (req, res) => {
+  const { prompt, model, system, speak } = req.body || {};
+  if (!prompt || typeof prompt !== 'string') {
+    return res.status(400).json({ error: 'prompt string is required' });
+  }
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  let fullText = '';
+  try {
+    const ollamaRes = await fetch(`${OLLAMA_API_URL}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: model || DEFAULT_MODEL, prompt, system, stream: true }),
+    });
+    if (!ollamaRes.ok) throw new Error(`Ollama returned ${ollamaRes.status}`);
+
+    // Node 18: ReadableStream is NOT async-iterable, must use getReader()
+    const reader = ollamaRes.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { done: streamDone, value } = await reader.read();
+      if (streamDone) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop(); // keep incomplete last line
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const obj = JSON.parse(line);
+          if (obj.response) {
+            fullText += obj.response;
+            res.write(`data: ${JSON.stringify({ token: obj.response })}\n\n`);
+          }
+          if (obj.done) {
+            res.write(`data: ${JSON.stringify({ done: true, fullText })}\n\n`);
+          }
+        } catch (_) { /* ignore parse errors on partial chunks */ }
+      }
+    }
+
+    addActivity('chat', `Ask AI stream (model: ${model || 'default'})`, { clientId: 'dashboard', model });
+
+    if (speak && fullText) {
+      try {
+        await callProviderTool('kokoro-tts', 'speak', { text: fullText });
+      } catch (speakErr) {
+        log(`ask-stream speak failed: ${speakErr.message}`);
+      }
+    }
+  } catch (err) {
+    res.write(`data: ${JSON.stringify({ error: err.message })}\n\n`);
+    log(`ask-stream failed: ${err.message}`);
+  }
+  res.end();
+});
+
+// ─── Chat Test (direct Ollama proxy — same path as WS chat_request) ──────────
+
+app.post('/api/chat', async (req, res) => {
+  const { message, model, system } = req.body || {};
+  if (!message || typeof message !== 'string') {
+    return res.status(400).json({ error: 'message string is required' });
+  }
+  const start = Date.now();
+  try {
+    const text = await ollamaGenerate(message, { model, system });
+    stats.chatRequests++;
+    addActivity('chat', `Dashboard chat test (model: ${model || 'default'})`, { clientId: 'dashboard', model });
+    res.json({ response: text, model: model || DEFAULT_MODEL, duration: Date.now() - start });
+  } catch (err) {
+    stats.chatErrors++;
+    addActivity('chat_error', `Dashboard chat test failed: ${err.message}`, { clientId: 'dashboard' });
+    res.status(500).json({ error: err.message, duration: Date.now() - start });
+  }
+});
+
 // ─── Start ───────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -762,6 +845,47 @@ async function main() {
     log(`MCP HTTP server listening on http://localhost:${HTTP_PORT}/mcp`);
   });
   log('MCP Broker running (HTTP + WebSocket)');
+
+  // Register the dashboard itself as a broker client
+  const dashboard = new BrokerClient('dashboard', {
+    url: `ws://localhost:${WS_PORT}`,
+    autoReconnect: true,
+  });
+
+  dashboard.addTool({
+    name: 'get_status',
+    description: 'Get broker server status snapshot',
+    inputSchema: { type: 'object', properties: {} },
+    handler: async () => JSON.stringify(buildStatusSnapshot()),
+  });
+
+  dashboard.addTool({
+    name: 'list_clients',
+    description: 'List all connected broker clients',
+    inputSchema: { type: 'object', properties: {} },
+    handler: async () => {
+      const clients = [];
+      for (const [id, entry] of registry) {
+        clients.push({ clientId: id, tools: entry.tools.length, connectedAt: entry.connectedAt });
+      }
+      return JSON.stringify(clients);
+    },
+  });
+
+  dashboard.addTool({
+    name: 'get_activity',
+    description: 'Get recent activity log entries',
+    inputSchema: {
+      type: 'object',
+      properties: { limit: { type: 'number', description: 'Max entries to return (default 20)' } },
+    },
+    handler: async ({ limit }) => JSON.stringify(activityLog.slice(-(limit || 20))),
+  });
+
+  // Small delay to ensure WS server is ready
+  setTimeout(() => {
+    dashboard.connect().catch(err => log(`Dashboard client connect failed: ${err.message}`));
+  }, 500);
 }
 
 main().catch((err) => {

@@ -1,11 +1,15 @@
 FROM node:18-alpine
 
-WORKDIR /app
+WORKDIR /app/mcp-broker-client
+COPY mcp-broker-client/sdk.js mcp-broker-client/tool-provider.js mcp-broker-client/package.json ./
+RUN npm install --omit=dev
 
-COPY package.json package-lock.json ./
+WORKDIR /app/mcp-broker
+
+COPY mcp-broker/package.json mcp-broker/package-lock.json ./
 RUN npm ci --production
 
-COPY server.js sdk.js dashboard.html ./
+COPY mcp-broker/server.js mcp-broker/sdk.js mcp-broker/dashboard.html mcp-broker/client-dashboard.js ./
 
 EXPOSE 3098 3099
 

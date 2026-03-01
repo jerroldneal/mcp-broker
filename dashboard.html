@@ -2,720 +2,1047 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MCP Broker — Dashboard</title>
 <style>
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
   :root {
-    --bg: #0f1117;
-    --surface: #1a1d27;
-    --surface2: #232733;
-    --border: #2d3140;
-    --text: #e4e6f0;
-    --text-dim: #8b8fa3;
-    --accent: #6c8cff;
-    --accent-dim: #4a5a8a;
-    --green: #4ade80;
-    --green-dim: #1a3a2a;
-    --red: #f87171;
-    --red-dim: #3a1a1a;
-    --yellow: #fbbf24;
-    --yellow-dim: #3a2e1a;
-    --cyan: #22d3ee;
-    --purple: #a78bfa;
+    /* ── Design tokens aligned with Ideas dashboard ── */
+    --bg-base:     #0a0e17;
+    --bg-surface:  #111827;
+    --bg-elevated: #1a2236;
+    --bg-hover:    #1e293b;
+    --accent:      #63b3ed;
+    --accent-dim:  rgba(99,179,237,0.15);
+    --accent-glow: rgba(99,179,237,0.25);
+    --accent-bright: #90cdf4;
+    --success:     #68d391;
+    --success-dim: rgba(104,211,145,0.15);
+    --danger:      #fc8181;
+    --danger-dim:  rgba(252,129,129,0.15);
+    --warning:     #f6ad55;
+    --warning-dim: rgba(246,173,85,0.15);
+    --purple:      #b794f6;
+    --purple-dim:  rgba(183,148,246,0.15);
+    --cyan:        #76e4f7;
+    --cyan-dim:    rgba(118,228,247,0.15);
+    --yellow:      #fbd38d;
+    --yellow-dim:  rgba(251,211,141,0.15);
+    --text-primary:   #e2e8f0;
+    --text-secondary: #a0aec0;
+    --text-muted:     #4a5568;
+    --border:      rgba(255,255,255,0.06);
+    --border-focus: rgba(99,179,237,0.4);
+    --glass-bg:    rgba(17,24,39,0.6);
+    --glass-border: rgba(255,255,255,0.08);
+    --sidebar-width: 260px;
+    --radius-sm: 6px;
+    --radius-md: 10px;
+    --radius-lg: 14px;
+    --tr-fast:  150ms cubic-bezier(.4,0,.2,1);
+    --tr-smooth: 250ms cubic-bezier(.4,0,.2,1);
   }
 
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+  @keyframes fade-in { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.5; } }
+  @keyframes slide-in { from { transform:translateX(100%); } to { transform:translateX(0); } }
+  @keyframes glow-pulse { 0%,100% { box-shadow: 0 0 4px currentColor; } 50% { box-shadow: 0 0 12px currentColor, 0 0 24px currentColor; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 
   body {
-    font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
+    width: 100%; min-height: 100vh;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 13px; background: var(--bg-base); color: var(--text-primary);
+    display: flex; overflow: hidden; -webkit-font-smoothing: antialiased;
   }
 
-  /* ── Header ── */
-  header {
-    background: var(--surface);
+  /* ═══════════════════════════════════════════════════════════════════════════
+     SIDEBAR
+     ═══════════════════════════════════════════════════════════════════════════ */
+  .sidebar {
+    width: var(--sidebar-width); height: 100vh;
+    background: var(--bg-surface); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; flex-shrink: 0;
+    position: fixed; left: 0; top: 0; z-index: 100; overflow: hidden;
+  }
+
+  .sidebar-header {
+    padding: 18px 16px 14px;
     border-bottom: 1px solid var(--border);
-    padding: 12px 20px;
-    display: flex;
-    align-items: center;
-    gap: 16px;
     flex-shrink: 0;
   }
 
-  header h1 {
-    font-size: 18px;
-    font-weight: 600;
-    color: var(--text);
+  .sidebar-brand {
+    display: flex; align-items: center; gap: 12px;
   }
 
-  header h1 span {
-    color: var(--accent);
+  .sidebar-logo {
+    width: 36px; height: 36px; border-radius: var(--radius-sm);
+    background: linear-gradient(135deg, var(--accent) 0%, var(--purple) 100%);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; flex-shrink: 0;
+    box-shadow: 0 2px 12px rgba(99,179,237,0.3);
   }
 
-  .connection-badge {
-    margin-left: auto;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 13px;
-    color: var(--text-dim);
+  .sidebar-title {
+    font-size: 15px; font-weight: 700; color: var(--text-primary);
+    letter-spacing: -0.3px;
+  }
+
+  .sidebar-subtitle {
+    font-size: 10px; color: var(--text-muted); margin-top: 2px;
+    text-transform: uppercase; letter-spacing: .5px;
+  }
+
+  /* ── Connection Status ── */
+  .sidebar-connection {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    display: flex; align-items: center; gap: 10px;
   }
 
   .connection-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--red);
-    transition: background 0.3s;
-  }
-
-  .connection-dot.connected { background: var(--green); }
-
-  /* ── Stats Bar ── */
-  .stats-bar {
-    display: flex;
-    gap: 0;
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--danger);
+    transition: all 0.3s ease;
     flex-shrink: 0;
-    overflow-x: auto;
   }
 
-  .stat-item {
-    padding: 10px 20px;
-    border-right: 1px solid var(--border);
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    white-space: nowrap;
+  .connection-dot.connected {
+    background: var(--success);
+    animation: glow-pulse 2s ease-in-out infinite;
+    color: var(--success);
   }
 
-  .stat-item:last-child { border-right: none; }
-
-  .stat-label {
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.6px;
-    color: var(--text-dim);
+  .connection-label {
+    font-size: 12px; color: var(--text-secondary);
   }
 
-  .stat-val {
-    font-size: 18px;
-    font-weight: 700;
-    font-variant-numeric: tabular-nums;
+  .connection-label .status-text {
+    font-weight: 600;
   }
 
-  .stat-val.green { color: var(--green); }
-  .stat-val.accent { color: var(--accent); }
-  .stat-val.yellow { color: var(--yellow); }
-  .stat-val.cyan { color: var(--cyan); }
-  .stat-val.purple { color: var(--purple); }
-
-  .stat-sub {
-    font-size: 10px;
-    color: var(--text-dim);
-  }
-
-  /* ── Main Layout ── */
-  .main {
-    flex: 1;
-    display: grid;
-    grid-template-columns: 320px 1fr 360px;
-    min-height: 0;
-  }
-
-  @media (max-width: 1100px) {
-    .main { grid-template-columns: 280px 1fr; }
-    .activity-panel { display: none; }
-  }
-
-  @media (max-width: 700px) {
-    .main { grid-template-columns: 1fr; }
-  }
-
-  /* ── Explorer Panel (left) ── */
-  .explorer-panel {
-    border-right: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-  }
-
-  .explorer-header {
+  /* ── Stats Grid ── */
+  .sidebar-stats {
     padding: 12px 16px;
     border-bottom: 1px solid var(--border);
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.6px;
-    color: var(--text-dim);
-    display: flex;
-    align-items: center;
+    flex-shrink: 0;
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
     gap: 8px;
+  }
+
+  .stat-card {
+    background: var(--bg-elevated);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    padding: 8px 10px;
+    text-align: center;
+    transition: var(--tr-fast);
+  }
+
+  .stat-card:hover {
+    border-color: var(--border-focus);
+    background: var(--bg-hover);
+  }
+
+  .stat-card .stat-num {
+    font-size: 20px; font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+  }
+
+  .stat-card .stat-lbl {
+    font-size: 9px; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: .5px;
+    margin-top: 2px;
+  }
+
+  .stat-num.c-accent  { color: var(--accent); }
+  .stat-num.c-success { color: var(--success); }
+  .stat-num.c-cyan    { color: var(--cyan); }
+  .stat-num.c-yellow  { color: var(--yellow); }
+  .stat-num.c-purple  { color: var(--purple); }
+  .stat-num.c-danger  { color: var(--danger); }
+
+  /* ── Broker Tools Quick Panel ── */
+  .broker-tools {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
     flex-shrink: 0;
   }
 
-  .explorer-body {
-    overflow-y: auto;
-    flex: 1;
+  .broker-tools-label {
+    font-size: 9px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+    color: var(--text-muted); padding: 0 4px 8px;
   }
 
-  /* ── Tree ── */
+  .bt-panels {
+    display: flex; flex-direction: column; gap: 6px;
+  }
+
+  .bt-panel {
+    background: var(--bg-elevated);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    transition: var(--tr-fast);
+  }
+
+  .bt-panel:hover { border-color: var(--border-focus); }
+
+  .bt-panel-header {
+    padding: 6px 10px;
+    display: flex; align-items: center; gap: 8px;
+    cursor: pointer; user-select: none;
+    transition: var(--tr-fast);
+  }
+
+  .bt-panel-header:hover { background: var(--bg-hover); }
+
+  .bt-panel-icon { font-size: 12px; flex-shrink: 0; }
+  .bt-panel-name { font-size: 11px; font-weight: 600; color: var(--text-primary); }
+
+  .bt-panel-timing {
+    margin-left: auto; font-size: 10px;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    color: var(--text-muted); font-variant-numeric: tabular-nums;
+  }
+
+  .bt-panel-timing.success { color: var(--success); }
+  .bt-panel-timing.error { color: var(--danger); }
+  .bt-panel-timing.running { color: var(--warning); animation: pulse 1s infinite; }
+
+  .bt-panel-body {
+    display: none; padding: 8px 10px;
+    border-top: 1px solid var(--border);
+  }
+
+  .bt-panel.open .bt-panel-body { display: block; }
+
+  .bt-input-row {
+    display: flex; gap: 6px; align-items: stretch;
+  }
+
+  .bt-input {
+    flex: 1; background: var(--bg-base); border: 1px solid var(--border);
+    border-radius: 4px; padding: 6px 10px;
+    color: var(--text-primary); font-size: 11px;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    outline: none; transition: var(--tr-fast);
+  }
+
+  .bt-input:focus {
+    border-color: var(--border-focus);
+    box-shadow: 0 0 0 2px var(--accent-dim);
+  }
+
+  .bt-input::placeholder { color: var(--text-muted); opacity: 0.5; }
+
+  textarea.bt-input {
+    min-height: 48px; resize: vertical; line-height: 1.4;
+  }
+
+  .bt-btn {
+    background: linear-gradient(135deg, var(--accent) 0%, #805ad5 100%);
+    color: #fff; border: none;
+    padding: 6px 12px; border-radius: 4px;
+    font-size: 11px; font-weight: 600; cursor: pointer;
+    transition: var(--tr-fast); font-family: inherit;
+    white-space: nowrap; flex-shrink: 0;
+  }
+
+  .bt-btn:hover { transform: translateY(-1px); }
+  .bt-btn:active { transform: translateY(0); }
+  .bt-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+  .bt-result {
+    margin-top: 6px; padding: 6px 8px;
+    background: var(--bg-base); border: 1px solid var(--glass-border);
+    border-radius: 4px; font-size: 11px;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    color: var(--text-secondary); line-height: 1.4;
+    max-height: 80px; overflow-y: auto;
+    white-space: pre-wrap; word-break: break-word;
+    display: none;
+  }
+
+  .bt-result.visible { display: block; animation: fade-in 0.15s ease-out; }
+  .bt-result.error { color: var(--danger); border-color: var(--danger-dim); }
+
+  .bt-options {
+    display: flex; gap: 6px; margin-top: 6px; align-items: center;
+  }
+
+  .bt-option-label {
+    font-size: 10px; color: var(--text-muted);
+  }
+
+  .bt-option-input {
+    background: var(--bg-base); border: 1px solid var(--border);
+    border-radius: 4px; padding: 4px 8px;
+    color: var(--text-primary); font-size: 10px;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    outline: none; width: 80px;
+  }
+
+  .bt-option-check {
+    accent-color: var(--accent); width: 13px; height: 13px; cursor: pointer;
+  }
+
+  /* ── Search ── */
+  .sidebar-search {
+    padding: 10px 16px 8px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .sidebar-search input {
+    width: 100%; padding: 7px 10px 7px 30px;
+    background: var(--bg-elevated); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); color: var(--text-primary);
+    font-size: 12px; font-family: inherit; outline: none;
+    transition: var(--tr-fast);
+  }
+
+  .sidebar-search input:focus {
+    border-color: var(--border-focus);
+    box-shadow: 0 0 0 2px var(--accent-dim);
+  }
+
+  .search-wrapper {
+    position: relative;
+  }
+
+  .search-icon {
+    position: absolute; left: 9px; top: 50%; transform: translateY(-50%);
+    font-size: 12px; color: var(--text-muted); pointer-events: none;
+  }
+
+  /* ── Tool Tree (in sidebar) ── */
+  .sidebar-nav {
+    flex: 1; overflow-y: auto; padding: 4px 0;
+  }
+
+  .sidebar-nav::-webkit-scrollbar { width: 3px; }
+  .sidebar-nav::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 3px; }
+
+  .nav-section-label {
+    font-size: 9px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+    color: var(--text-muted); padding: 12px 16px 4px;
+  }
+
   .tree-client {
     border-bottom: 1px solid var(--border);
   }
 
   .tree-client-header {
     padding: 10px 16px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    cursor: pointer;
-    transition: background 0.15s;
+    display: flex; align-items: center; gap: 8px;
+    cursor: pointer; transition: var(--tr-fast);
     user-select: none;
   }
 
-  .tree-client-header:hover { background: var(--surface2); }
+  .tree-client-header:hover { background: var(--bg-hover); }
 
   .tree-toggle {
-    font-size: 10px;
-    color: var(--text-dim);
-    width: 14px;
-    text-align: center;
-    transition: transform 0.15s;
-    flex-shrink: 0;
+    font-size: 10px; color: var(--text-muted);
+    width: 14px; text-align: center;
+    transition: transform 0.2s ease; flex-shrink: 0;
   }
 
   .tree-toggle.open { transform: rotate(90deg); }
 
+  .tree-client-dot {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: var(--success); flex-shrink: 0;
+  }
+
   .tree-client-name {
-    font-weight: 600;
-    font-size: 13px;
-    color: var(--cyan);
+    font-weight: 600; font-size: 12px; color: var(--cyan);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
 
   .tree-client-count {
-    font-size: 11px;
-    color: var(--text-dim);
-    margin-left: auto;
+    font-size: 10px; color: var(--text-muted); margin-left: auto;
+    background: var(--bg-elevated); padding: 1px 6px;
+    border-radius: 10px; font-weight: 600; flex-shrink: 0;
   }
 
   .tree-client-link {
-    font-size: 12px;
-    color: var(--accent);
-    text-decoration: none;
-    padding: 2px 6px;
-    border-radius: 4px;
-    transition: background 0.15s, color 0.15s;
-    flex-shrink: 0;
+    font-size: 11px; color: var(--accent); text-decoration: none;
+    padding: 2px 6px; border-radius: 4px;
+    transition: var(--tr-fast); flex-shrink: 0;
+    opacity: 0;
   }
 
-  .tree-client-link:hover {
-    background: var(--accent-dim);
-    color: #fff;
-  }
+  .tree-client-header:hover .tree-client-link { opacity: 1; }
+  .tree-client-link:hover { background: var(--accent-dim); color: #fff; }
 
-  .tree-client-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--green);
-    flex-shrink: 0;
-  }
-
-  .tree-tools {
-    display: none;
-  }
-
-  .tree-tools.open {
-    display: block;
-  }
+  .tree-tools { display: none; }
+  .tree-tools.open { display: block; }
 
   .tree-tool {
-    padding: 7px 16px 7px 38px;
-    font-size: 12px;
-    cursor: pointer;
-    transition: background 0.15s;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    color: var(--text);
+    padding: 7px 16px 7px 40px;
+    font-size: 12px; cursor: pointer;
+    transition: var(--tr-fast);
+    display: flex; align-items: center; gap: 8px;
+    color: var(--text-secondary);
+    border-left: 2px solid transparent;
   }
 
-  .tree-tool:hover { background: var(--surface2); }
+  .tree-tool:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
 
   .tree-tool.selected {
     background: var(--accent-dim);
     color: var(--accent);
-  }
-
-  .tree-tool-icon {
-    color: var(--text-dim);
-    font-size: 11px;
-    flex-shrink: 0;
-  }
-
-  .tree-tool-name {
-    font-family: 'Cascadia Code', 'Fira Code', monospace;
-    font-size: 12px;
-  }
-
-  /* ── Interaction Panel (center) ── */
-  .interaction-panel {
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-  }
-
-  .interaction-header {
-    padding: 12px 20px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-shrink: 0;
-    background: var(--surface);
-  }
-
-  .interaction-title {
-    font-size: 14px;
+    border-left-color: var(--accent);
     font-weight: 600;
   }
 
-  .interaction-client-tag {
+  .tree-tool-icon {
+    color: var(--text-muted); font-size: 11px; flex-shrink: 0;
+    transition: color var(--tr-fast);
+  }
+
+  .tree-tool.selected .tree-tool-icon { color: var(--accent); }
+  .tree-tool:hover .tree-tool-icon { color: var(--text-secondary); }
+
+  .tree-tool-name {
+    font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
     font-size: 11px;
-    color: var(--cyan);
-    background: var(--surface2);
-    padding: 2px 8px;
-    border-radius: 4px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    flex: 1;
+  }
+
+  .tree-tool-activity {
+    font-size: 10px; cursor: pointer; flex-shrink: 0;
+    opacity: 0.3; transition: opacity var(--tr-fast);
+    padding: 2px 4px; border-radius: 3px;
+    line-height: 1;
+  }
+  .tree-tool-activity:hover { opacity: 0.7; }
+  .tree-tool-activity.on { opacity: 1; color: var(--green); }
+  .tree-tool:hover .tree-tool-activity { opacity: 0.6; }
+  .tree-tool:hover .tree-tool-activity.on { opacity: 1; }
+
+  .activity-toggle-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 0 2px; margin-bottom: 4px;
+    font-size: 12px; color: var(--text-secondary);
+    cursor: pointer; user-select: none;
+  }
+  .activity-toggle-row:hover { color: var(--text-primary); }
+  .activity-toggle-check {
+    width: 14px; height: 14px; border-radius: 3px;
+    border: 1px solid var(--border); display: inline-flex;
+    align-items: center; justify-content: center;
+    font-size: 10px; transition: var(--tr-fast);
+    background: transparent;
+  }
+  .activity-toggle-check.on {
+    background: var(--green); border-color: var(--green); color: #000;
+  }
+
+  .sidebar-footer {
+    padding: 10px 16px; border-top: 1px solid var(--border); flex-shrink: 0;
+    font-size: 10px; color: var(--text-muted); text-align: center;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+  }
+
+  .sidebar-footer .uptime-badge {
+    color: var(--accent); font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .empty-state {
+    padding: 30px 20px; text-align: center;
+    color: var(--text-muted); font-size: 12px;
+  }
+
+  .empty-state .icon { font-size: 32px; margin-bottom: 10px; opacity: 0.5; }
+  .empty-state .msg { font-size: 13px; line-height: 1.5; }
+
+  /* ═══════════════════════════════════════════════════════════════════════════
+     MAIN CONTENT
+     ═══════════════════════════════════════════════════════════════════════════ */
+  .main {
+    flex: 1; margin-left: var(--sidebar-width);
+    height: 100vh; display: flex; flex-direction: column; overflow: hidden;
+  }
+
+  /* ── Topbar ── */
+  .topbar {
+    height: 48px; background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px; flex-shrink: 0;
+  }
+
+  .topbar-left { display: flex; align-items: center; gap: 12px; }
+
+  .topbar-title {
+    font-size: 14px; font-weight: 700; color: var(--text-primary);
+  }
+
+  .topbar-breadcrumb {
+    font-size: 11px; color: var(--text-muted);
+    display: flex; align-items: center; gap: 6px;
+  }
+
+  .topbar-breadcrumb .sep { color: var(--text-muted); opacity: 0.5; }
+
+  .topbar-breadcrumb .client-name { color: var(--cyan); font-weight: 500; }
+
+  .topbar-right { display: flex; align-items: center; gap: 10px; }
+
+  .topbar-stat {
+    display: flex; align-items: center; gap: 4px;
+    font-size: 11px; color: var(--text-muted);
+  }
+
+  .topbar-stat .num { font-weight: 700; color: var(--text-secondary); }
+
+  /* ── Content Grid (interaction + activity) ── */
+  .content-grid {
+    flex: 1; display: grid;
+    grid-template-columns: 1fr 340px;
+    min-height: 0;
+  }
+
+  @media (max-width: 1100px) {
+    .content-grid { grid-template-columns: 1fr; }
+    .activity-panel { display: none; }
+  }
+
+  @media (max-width: 900px) {
+    .sidebar { display: none; }
+    .main { margin-left: 0; }
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════════════
+     INTERACTION PANEL (center)
+     ═══════════════════════════════════════════════════════════════════════════ */
+  .interaction-panel {
+    display: flex; flex-direction: column; min-height: 0;
+    border-right: 1px solid var(--border);
   }
 
   .interaction-body {
-    flex: 1;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
+    flex: 1; overflow-y: auto;
+    display: flex; flex-direction: column;
   }
 
+  .interaction-body::-webkit-scrollbar { width: 4px; }
+  .interaction-body::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 4px; }
+
+  /* ── Welcome State ── */
   .tool-welcome {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-dim);
-    gap: 8px;
-    padding: 40px;
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    color: var(--text-muted); gap: 12px; padding: 40px;
   }
 
-  .tool-welcome .icon { font-size: 48px; opacity: 0.4; }
-  .tool-welcome .msg { font-size: 14px; }
+  .tool-welcome .icon {
+    font-size: 56px; opacity: 0.3;
+    filter: grayscale(0.5);
+  }
 
+  .tool-welcome .msg {
+    font-size: 14px; line-height: 1.6; text-align: center;
+    max-width: 300px;
+  }
+
+  .tool-welcome .hint {
+    font-size: 11px; color: var(--text-muted); opacity: 0.6;
+    margin-top: 4px;
+  }
+
+  /* ── Tool Description ── */
   .tool-desc {
-    padding: 16px 20px;
-    font-size: 13px;
-    color: var(--text-dim);
+    padding: 16px 24px;
+    font-size: 13px; color: var(--text-secondary);
     border-bottom: 1px solid var(--border);
-    line-height: 1.5;
+    line-height: 1.6;
+    background: var(--bg-elevated);
+    border-left: 3px solid var(--accent);
+    margin: 16px 20px 0;
+    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
   }
 
   /* ── Form ── */
   .tool-form {
-    padding: 16px 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
+    padding: 20px 24px;
+    display: flex; flex-direction: column; gap: 16px;
   }
 
   .form-field {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
+    display: flex; flex-direction: column; gap: 6px;
+    animation: fade-in 0.2s ease-out;
   }
 
   .form-label {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text);
-    display: flex;
-    align-items: center;
-    gap: 6px;
+    font-size: 12px; font-weight: 600; color: var(--text-primary);
+    display: flex; align-items: center; gap: 8px;
   }
 
   .form-label .type-tag {
-    font-size: 10px;
-    font-weight: 400;
-    color: var(--text-dim);
-    background: var(--surface2);
-    padding: 1px 6px;
-    border-radius: 3px;
-    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 10px; font-weight: 400; color: var(--text-muted);
+    background: var(--bg-elevated); padding: 2px 8px;
+    border-radius: 4px; font-family: 'Cascadia Code', 'Fira Code', monospace;
+    border: 1px solid var(--glass-border);
   }
 
   .form-label .required-tag {
-    font-size: 10px;
-    font-weight: 400;
-    color: var(--yellow);
+    font-size: 10px; font-weight: 600;
+    color: var(--warning); letter-spacing: 0.3px;
   }
 
   .form-hint {
-    font-size: 11px;
-    color: var(--text-dim);
+    font-size: 11px; color: var(--text-muted); line-height: 1.5;
   }
 
   .form-input {
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 8px 12px;
-    color: var(--text);
-    font-size: 13px;
-    font-family: 'Cascadia Code', 'Fira Code', monospace;
-    outline: none;
-    transition: border-color 0.15s;
+    background: var(--bg-base); border: 1px solid var(--border);
+    border-radius: var(--radius-sm); padding: 10px 14px;
+    color: var(--text-primary); font-size: 13px;
+    font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    outline: none; transition: var(--tr-smooth);
   }
 
-  .form-input:focus { border-color: var(--accent); }
+  .form-input:focus {
+    border-color: var(--border-focus);
+    box-shadow: 0 0 0 3px var(--accent-dim);
+  }
+
+  .form-input::placeholder { color: var(--text-muted); opacity: 0.6; }
 
   textarea.form-input {
-    min-height: 60px;
-    resize: vertical;
+    min-height: 80px; resize: vertical; line-height: 1.5;
   }
 
+  select.form-input { cursor: pointer; }
+
   .form-checkbox-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 4px 0;
+    display: flex; align-items: center; gap: 10px; padding: 4px 0;
+    cursor: pointer;
   }
 
   .form-checkbox-row input[type="checkbox"] {
-    accent-color: var(--accent);
-    width: 16px;
-    height: 16px;
+    accent-color: var(--accent); width: 16px; height: 16px;
+    cursor: pointer;
   }
 
+  .form-checkbox-row label {
+    font-size: 12px; color: var(--text-secondary); cursor: pointer;
+  }
+
+  /* ── Form Actions ── */
   .form-actions {
-    display: flex;
-    gap: 10px;
-    padding: 12px 20px;
+    display: flex; gap: 10px;
+    padding: 14px 24px;
     border-top: 1px solid var(--border);
     flex-shrink: 0;
+    background: var(--bg-surface);
   }
 
   .btn-run {
-    background: var(--accent);
-    color: #fff;
-    border: none;
-    padding: 8px 20px;
-    border-radius: 6px;
-    font-size: 13px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: opacity 0.15s;
+    background: linear-gradient(135deg, var(--accent) 0%, #805ad5 100%);
+    color: #fff; border: none;
+    padding: 10px 24px; border-radius: var(--radius-sm);
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    transition: var(--tr-smooth); font-family: inherit;
+    box-shadow: 0 2px 8px rgba(99,179,237,0.25);
   }
 
-  .btn-run:hover { opacity: 0.85; }
-  .btn-run:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-run:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(99,179,237,0.35);
+  }
+
+  .btn-run:active { transform: translateY(0); }
+
+  .btn-run:disabled {
+    opacity: 0.4; cursor: not-allowed;
+    transform: none; box-shadow: none;
+  }
 
   .btn-clear-form {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    color: var(--text-dim);
-    padding: 8px 16px;
-    border-radius: 6px;
-    font-size: 13px;
-    cursor: pointer;
-    transition: all 0.15s;
+    background: var(--bg-elevated);
+    border: 1px solid var(--glass-border);
+    color: var(--text-secondary); padding: 10px 18px;
+    border-radius: var(--radius-sm); font-size: 13px;
+    cursor: pointer; transition: var(--tr-fast); font-family: inherit;
   }
 
-  .btn-clear-form:hover { background: var(--border); color: var(--text); }
+  .btn-clear-form:hover {
+    background: var(--bg-hover); color: var(--text-primary);
+    border-color: var(--border-focus);
+  }
 
-  /* ── Result ── */
+  /* ── Result Area ── */
   .result-area {
     border-top: 1px solid var(--border);
     flex-shrink: 0;
+    animation: fade-in 0.2s ease-out;
   }
 
   .result-header {
-    padding: 10px 20px;
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.6px;
-    color: var(--text-dim);
-    display: flex;
-    align-items: center;
-    gap: 10px;
+    padding: 12px 24px;
+    font-size: 12px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.6px;
+    color: var(--text-muted);
+    display: flex; align-items: center; gap: 10px;
+    background: var(--bg-surface);
   }
 
   .result-timing {
-    font-weight: 400;
-    font-size: 11px;
-    color: var(--text-dim);
+    font-weight: 400; font-size: 11px; color: var(--text-muted);
+    font-variant-numeric: tabular-nums;
   }
 
   .result-status {
-    font-size: 11px;
-    font-weight: 600;
-    padding: 2px 8px;
-    border-radius: 4px;
+    font-size: 10px; font-weight: 700; padding: 3px 10px;
+    border-radius: 10px; letter-spacing: 0.3px;
   }
 
-  .result-status.success { background: var(--green-dim); color: var(--green); }
-  .result-status.error { background: var(--red-dim); color: var(--red); }
+  .result-status.success { background: var(--success-dim); color: var(--success); }
+  .result-status.error   { background: var(--danger-dim); color: var(--danger); }
 
   .result-body {
-    padding: 12px 20px;
-    max-height: 300px;
-    overflow-y: auto;
+    padding: 16px 24px; max-height: 300px; overflow-y: auto;
   }
+
+  .result-body::-webkit-scrollbar { width: 4px; }
+  .result-body::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 4px; }
 
   .result-body pre {
-    font-family: 'Cascadia Code', 'Fira Code', monospace;
-    font-size: 12px;
-    line-height: 1.5;
-    white-space: pre-wrap;
-    word-break: break-word;
-    color: var(--text);
+    font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    font-size: 12px; line-height: 1.6;
+    white-space: pre-wrap; word-break: break-word;
+    color: var(--text-secondary);
+    background: var(--bg-base); border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm); padding: 14px;
   }
 
-  .result-body pre.error-text { color: var(--red); }
+  .result-body pre.error-text {
+    color: var(--danger);
+    border-color: var(--danger-dim);
+    background: rgba(252,129,129,0.05);
+  }
 
   /* ── Spinner ── */
   .spinner {
-    display: inline-block;
-    width: 14px;
-    height: 14px;
-    border: 2px solid var(--border);
+    display: inline-block; width: 14px; height: 14px;
+    border: 2px solid var(--glass-border);
     border-top-color: var(--accent);
     border-radius: 50%;
     animation: spin 0.6s linear infinite;
+    vertical-align: middle;
   }
 
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  /* ── Activity Panel (right) ── */
+  /* ═══════════════════════════════════════════════════════════════════════════
+     ACTIVITY PANEL (right)
+     ═══════════════════════════════════════════════════════════════════════════ */
   .activity-panel {
     border-left: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
+    display: flex; flex-direction: column; min-height: 0;
+    background: var(--bg-surface);
   }
 
   .activity-header {
     padding: 12px 16px;
     border-bottom: 1px solid var(--border);
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.6px;
-    color: var(--text-dim);
-    display: flex;
-    align-items: center;
-    gap: 8px;
+    font-size: 12px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.6px;
+    color: var(--text-muted);
+    display: flex; align-items: center; gap: 8px;
     flex-shrink: 0;
+  }
+
+  .panel-badge {
+    background: var(--accent-dim); color: var(--accent);
+    font-size: 10px; font-weight: 700;
+    padding: 2px 8px; border-radius: 10px;
   }
 
   .activity-actions {
-    margin-left: auto;
-    display: flex;
-    gap: 6px;
+    margin-left: auto; display: flex; gap: 6px;
   }
 
   .activity-body {
-    overflow-y: auto;
-    flex: 1;
+    overflow-y: auto; flex: 1;
   }
 
+  .activity-body::-webkit-scrollbar { width: 3px; }
+  .activity-body::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 3px; }
+
   .activity-item {
-    padding: 8px 16px;
+    padding: 10px 16px;
     border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    font-size: 12px;
-    transition: background 0.15s;
+    display: flex; align-items: flex-start; gap: 10px;
+    font-size: 12px; transition: var(--tr-fast);
+    animation: fade-in 0.15s ease-out;
   }
 
   .activity-item:last-child { border-bottom: none; }
-  .activity-item:hover { background: var(--surface2); }
+  .activity-item:hover { background: var(--bg-hover); }
 
   .activity-time {
-    color: var(--text-dim);
-    font-family: 'Cascadia Code', 'Fira Code', monospace;
-    font-size: 10px;
-    flex-shrink: 0;
-    min-width: 64px;
+    color: var(--text-muted);
+    font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    font-size: 10px; flex-shrink: 0; min-width: 60px;
     padding-top: 1px;
+    font-variant-numeric: tabular-nums;
   }
 
   .activity-icon {
-    flex-shrink: 0;
-    width: 16px;
-    text-align: center;
+    flex-shrink: 0; width: 16px; text-align: center;
     font-size: 12px;
   }
 
   .activity-msg {
-    color: var(--text);
-    word-break: break-word;
-    line-height: 1.4;
+    color: var(--text-secondary); word-break: break-word;
+    line-height: 1.5;
   }
 
   .activity-msg code {
-    background: var(--surface2);
-    padding: 1px 4px;
+    background: var(--bg-elevated); padding: 1px 6px;
     border-radius: 3px;
-    font-family: 'Cascadia Code', 'Fira Code', monospace;
-    font-size: 11px;
-  }
-
-  /* ── Empty States ── */
-  .empty-state {
-    padding: 40px 20px;
-    text-align: center;
-    color: var(--text-dim);
-    font-size: 13px;
-  }
-
-  .empty-state .icon {
-    font-size: 28px;
-    margin-bottom: 8px;
+    font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    font-size: 11px; color: var(--accent);
   }
 
   /* ── Buttons ── */
   .btn-sm {
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    color: var(--text-dim);
-    font-size: 10px;
-    padding: 3px 8px;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: all 0.15s;
+    background: var(--bg-elevated);
+    border: 1px solid var(--glass-border);
+    color: var(--text-muted); font-size: 10px;
+    padding: 4px 10px; border-radius: var(--radius-sm);
+    cursor: pointer; transition: var(--tr-fast);
+    font-family: inherit;
   }
 
-  .btn-sm:hover { background: var(--border); color: var(--text); }
-
-  .panel-badge {
-    background: var(--accent-dim);
-    color: var(--accent);
-    font-size: 10px;
-    font-weight: 600;
-    padding: 1px 7px;
-    border-radius: 8px;
+  .btn-sm:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border-color: var(--border-focus);
   }
 
-  /* ── Scrollbar ── */
-  ::-webkit-scrollbar { width: 5px; }
+  /* ── Scrollbar global ── */
+  ::-webkit-scrollbar { width: 4px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
-  ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+  ::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
 
-  /* ── Animation ── */
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(-4px); }
-    to { opacity: 1; transform: translateY(0); }
+  /* ── Responsive ── */
+  @media (max-width: 900px) {
+    .sidebar { display: none; }
+    .main { margin-left: 0; }
   }
-  .fade-in { animation: fadeIn 0.2s ease-out; }
 </style>
 </head>
 <body>
-<header>
-  <h1><span>MCP</span> Broker</h1>
-  <div class="connection-badge">
-    <div id="sse-dot" class="connection-dot"></div>
-    <span id="sse-label">Connecting...</span>
-  </div>
-</header>
 
-<!-- Stats Bar -->
-<div class="stats-bar">
-  <div class="stat-item">
-    <span class="stat-label">Uptime</span>
-    <span class="stat-val accent" id="stat-uptime">—</span>
+<!-- ════════════════════════════════════════════════════════════ SIDEBAR -->
+<div class="sidebar">
+  <div class="sidebar-header">
+    <div class="sidebar-brand">
+      <div class="sidebar-logo">⚡</div>
+      <div>
+        <div class="sidebar-title">MCP Broker</div>
+        <div class="sidebar-subtitle">Tool Orchestration Hub</div>
+      </div>
+    </div>
   </div>
-  <div class="stat-item">
-    <span class="stat-label">Clients</span>
-    <span class="stat-val green" id="stat-clients">0</span>
+
+  <div class="sidebar-connection">
+    <div id="sse-dot" class="connection-dot"></div>
+    <div class="connection-label">
+      <span id="sse-label" class="status-text">Connecting…</span>
+    </div>
   </div>
-  <div class="stat-item">
-    <span class="stat-label">Tools</span>
-    <span class="stat-val cyan" id="stat-tools">0</span>
+
+  <div class="sidebar-stats">
+    <div class="stat-card">
+      <div class="stat-num c-success" id="stat-clients">0</div>
+      <div class="stat-lbl">Clients</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num c-cyan" id="stat-tools">0</div>
+      <div class="stat-lbl">Tools</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num c-yellow" id="stat-tool-calls">0</div>
+      <div class="stat-lbl">Calls</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num c-purple" id="stat-chat">0</div>
+      <div class="stat-lbl">Chat</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num c-accent" id="stat-total-conn">0</div>
+      <div class="stat-lbl">Total</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num c-danger" id="stat-errors">0</div>
+      <div class="stat-lbl">Errors</div>
+    </div>
   </div>
-  <div class="stat-item">
-    <span class="stat-label">Calls</span>
-    <span class="stat-val yellow" id="stat-tool-calls">0</span>
-    <span class="stat-sub" id="stat-tool-errors"></span>
+
+  <div class="broker-tools">
+    <div class="broker-tools-label">Broker Tools</div>
+    <div class="bt-panels">
+      <!-- Speak -->
+      <div class="bt-panel" id="bt-speak">
+        <div class="bt-panel-header" onclick="btToggle('bt-speak')">
+          <span class="bt-panel-icon">🔊</span>
+          <span class="bt-panel-name">Speak</span>
+          <span class="bt-panel-timing" id="bt-speak-timing"></span>
+        </div>
+        <div class="bt-panel-body">
+          <div class="bt-input-row">
+            <input class="bt-input" id="bt-speak-text" type="text" placeholder="Text to speak…" onkeydown="if(event.key==='Enter')btSpeak()">
+            <button class="bt-btn" id="bt-speak-btn" onclick="btSpeak()">▶</button>
+          </div>
+          <div class="bt-result" id="bt-speak-result"></div>
+        </div>
+      </div>
+      <!-- Ask AI -->
+      <div class="bt-panel" id="bt-ask">
+        <div class="bt-panel-header" onclick="btToggle('bt-ask')">
+          <span class="bt-panel-icon">🤖</span>
+          <span class="bt-panel-name">Ask AI</span>
+          <span class="bt-panel-timing" id="bt-ask-timing"></span>
+        </div>
+        <div class="bt-panel-body">
+          <div class="bt-input-row">
+            <input class="bt-input" id="bt-ask-prompt" type="text" placeholder="Ask a question…" onkeydown="if(event.key==='Enter')btAsk()">
+            <button class="bt-btn" id="bt-ask-btn" onclick="btAsk()">▶</button>
+          </div>
+          <div class="bt-options">
+            <input type="checkbox" class="bt-option-check" id="bt-ask-speak">
+            <label class="bt-option-label" for="bt-ask-speak">Speak</label>
+            <span class="bt-option-label" style="margin-left:auto">Model:</span>
+            <input class="bt-option-input" id="bt-ask-model" type="text" placeholder="default">
+          </div>
+          <div class="bt-result" id="bt-ask-result"></div>
+        </div>
+      </div>
+      <!-- Chat -->
+      <div class="bt-panel" id="bt-chat">
+        <div class="bt-panel-header" onclick="btToggle('bt-chat')">
+          <span class="bt-panel-icon">💬</span>
+          <span class="bt-panel-name">Chat</span>
+          <span class="bt-panel-timing" id="bt-chat-timing"></span>
+        </div>
+        <div class="bt-panel-body">
+          <div class="bt-input-row">
+            <input class="bt-input" id="bt-chat-msg" type="text" placeholder="Send a message…" onkeydown="if(event.key==='Enter')btChat()">
+            <button class="bt-btn" id="bt-chat-btn" onclick="btChat()">▶</button>
+          </div>
+          <div class="bt-options">
+            <span class="bt-option-label">Model:</span>
+            <input class="bt-option-input" id="bt-chat-model" type="text" placeholder="default">
+          </div>
+          <div class="bt-result" id="bt-chat-result"></div>
+        </div>
+      </div>
+      <!-- Clients -->
+      <div class="bt-panel" id="bt-clients">
+        <div class="bt-panel-header" onclick="btToggle('bt-clients')">
+          <span class="bt-panel-icon">📋</span>
+          <span class="bt-panel-name">Clients</span>
+          <span class="bt-panel-timing" id="bt-clients-timing"></span>
+        </div>
+        <div class="bt-panel-body">
+          <div class="bt-input-row">
+            <button class="bt-btn" onclick="btClients()" style="width:100%">List Connected Clients</button>
+          </div>
+          <div class="bt-result" id="bt-clients-result"></div>
+        </div>
+      </div>
+    </div>
   </div>
-  <div class="stat-item">
-    <span class="stat-label">Chat</span>
-    <span class="stat-val purple" id="stat-chat">0</span>
-    <span class="stat-sub" id="stat-chat-errors"></span>
+
+  <div class="sidebar-search">
+    <div class="search-wrapper">
+      <span class="search-icon">🔍</span>
+      <input type="text" id="toolSearch" placeholder="Filter tools…" autocomplete="off">
+    </div>
   </div>
-  <div class="stat-item">
-    <span class="stat-label">Total Conn</span>
-    <span class="stat-val" id="stat-total-conn">0</span>
+
+  <nav class="sidebar-nav">
+    <div class="nav-section-label">Connected Clients</div>
+    <div id="explorer-body">
+      <div class="empty-state">
+        <div class="icon">📡</div>
+        <div class="msg">No broker-clients connected</div>
+      </div>
+    </div>
+  </nav>
+
+  <div class="sidebar-footer">
+    Uptime: <span class="uptime-badge" id="stat-uptime">—</span>
   </div>
 </div>
 
-<!-- Main 3-Column Layout -->
+<!-- ════════════════════════════════════════════════════════════ MAIN -->
 <div class="main">
-  <!-- Left: Tool Explorer -->
-  <div class="explorer-panel">
-    <div class="explorer-header">
-      Tool Explorer
-      <span class="panel-badge" id="tools-badge">0</span>
+  <div class="topbar">
+    <div class="topbar-left">
+      <span class="topbar-title" id="topbar-title">Tool Workbench</span>
+      <span class="topbar-breadcrumb" id="topbar-breadcrumb"></span>
     </div>
-    <div class="explorer-body" id="explorer-body">
-      <div class="empty-state">
-        <div class="icon">📡</div>
-        No broker-clients connected
+    <div class="topbar-right">
+      <div class="topbar-stat">
+        <span id="stat-tool-errors" style="color:var(--danger)"></span>
+      </div>
+      <div class="topbar-stat">
+        <span id="stat-chat-errors" style="color:var(--danger)"></span>
       </div>
     </div>
   </div>
 
-  <!-- Center: Interaction -->
-  <div class="interaction-panel">
-    <div class="interaction-header" id="interaction-header" style="display:none;">
-      <span class="interaction-title" id="interaction-title"></span>
-      <span class="interaction-client-tag" id="interaction-client-tag"></span>
-    </div>
-    <div class="interaction-body" id="interaction-body">
-      <div class="tool-welcome" id="tool-welcome">
-        <div class="icon">🔧</div>
-        <div class="msg">Select a tool from the explorer to try it</div>
+  <div class="content-grid">
+    <!-- Center: Interaction Panel -->
+    <div class="interaction-panel">
+      <div class="interaction-body" id="interaction-body">
+        <div class="tool-welcome" id="tool-welcome">
+          <div class="icon">⚡</div>
+          <div class="msg">Select a tool from the sidebar to begin</div>
+          <div class="hint">Browse connected clients and their tools in the left panel</div>
+        </div>
+      </div>
+      <div class="form-actions" id="form-actions" style="display:none;">
+        <button class="btn-run" id="btn-run" onclick="runTool()">▶ Run Tool</button>
+        <button class="btn-clear-form" onclick="clearForm()">Clear</button>
+      </div>
+      <div class="result-area" id="result-area" style="display:none;">
+        <div class="result-header" id="result-header"></div>
+        <div class="result-body" id="result-body"></div>
       </div>
     </div>
-    <div class="form-actions" id="form-actions" style="display:none;">
-      <button class="btn-run" id="btn-run" onclick="runTool()">Run Tool</button>
-      <button class="btn-clear-form" onclick="clearForm()">Clear</button>
-    </div>
-    <div class="result-area" id="result-area" style="display:none;">
-      <div class="result-header" id="result-header"></div>
-      <div class="result-body" id="result-body"></div>
-    </div>
-  </div>
 
-  <!-- Right: Activity Log -->
-  <div class="activity-panel">
-    <div class="activity-header">
-      Activity
-      <span class="panel-badge" id="activity-badge">0</span>
-      <div class="activity-actions">
-        <button class="btn-sm" onclick="toggleAutoScroll()"><span id="autoscroll-label">Auto</span></button>
-        <button class="btn-sm" onclick="clearLog()">Clear</button>
+    <!-- Right: Activity Log -->
+    <div class="activity-panel">
+      <div class="activity-header">
+        Activity
+        <span class="panel-badge" id="activity-badge">0</span>
+        <div class="activity-actions">
+          <button class="btn-sm" onclick="toggleAutoScroll()"><span id="autoscroll-label">Auto</span></button>
+          <button class="btn-sm" onclick="clearLog()">Clear</button>
+        </div>
       </div>
-    </div>
-    <div class="activity-body" id="activity-body">
-      <div class="empty-state">
-        <div class="icon">📋</div>
-        No activity yet
+      <div class="activity-body" id="activity-body">
+        <div class="empty-state">
+          <div class="icon">📋</div>
+          <div class="msg">No activity yet</div>
+        </div>
       </div>
     </div>
   </div>
@@ -732,6 +1059,36 @@
   let currentClients = [];
   let selectedTool = null; // { clientId, name, description, inputSchema }
 
+  // ── Activity Filter (per-tool opt-in) ──
+  const ACTIVITY_STORAGE_KEY = 'broker-activity-enabled';
+  let activityEnabled = new Set(JSON.parse(localStorage.getItem(ACTIVITY_STORAGE_KEY) || '[]'));
+
+  function activityKey(clientId, toolName) { return clientId + '__' + toolName; }
+
+  function isActivityEnabled(clientId, toolName) {
+    return activityEnabled.has(activityKey(clientId, toolName));
+  }
+
+  function toggleActivity(clientId, toolName) {
+    const key = activityKey(clientId, toolName);
+    if (activityEnabled.has(key)) activityEnabled.delete(key);
+    else activityEnabled.add(key);
+    localStorage.setItem(ACTIVITY_STORAGE_KEY, JSON.stringify([...activityEnabled]));
+    renderExplorer(currentClients);
+    // Update tool card toggle if this tool is selected
+    if (selectedTool && selectedTool.clientId === clientId && selectedTool.name === toolName) {
+      updateToolCardActivityToggle();
+    }
+  }
+
+  function shouldShowActivity(entry) {
+    // Always show non-tool events (connect, disconnect) and events without tool data
+    if (!entry.data || !entry.data.tool) return true;
+    // For tool events, check if that tool's activity is enabled
+    const clientId = entry.data.clientId || 'broker';
+    return activityEnabled.has(activityKey(clientId, entry.data.tool));
+  }
+
   // ── Elements ──
   const $ = (id) => document.getElementById(id);
   const $sseDot = $('sse-dot');
@@ -744,11 +1101,8 @@
   const $statChat = $('stat-chat');
   const $statChatErrors = $('stat-chat-errors');
   const $statTotalConn = $('stat-total-conn');
-  const $toolsBadge = $('tools-badge');
+  const $statErrors = $('stat-errors');
   const $explorerBody = $('explorer-body');
-  const $interactionHeader = $('interaction-header');
-  const $interactionTitle = $('interaction-title');
-  const $interactionClientTag = $('interaction-client-tag');
   const $interactionBody = $('interaction-body');
   const $formActions = $('form-actions');
   const $resultArea = $('result-area');
@@ -756,6 +1110,8 @@
   const $resultBody = $('result-body');
   const $activityBadge = $('activity-badge');
   const $activityBody = $('activity-body');
+  const $topbarTitle = $('topbar-title');
+  const $topbarBreadcrumb = $('topbar-breadcrumb');
 
   // ── Formatters ──
   function formatUptime(ms) {
@@ -787,10 +1143,11 @@
     $statClients.textContent = state.connectedClients;
     $statTools.textContent = state.totalTools;
     $statToolCalls.textContent = state.stats.toolCalls;
-    $statToolErrors.textContent = state.stats.toolErrors > 0 ? '(' + state.stats.toolErrors + ' err)' : '';
+    $statToolErrors.textContent = state.stats.toolErrors > 0 ? state.stats.toolErrors + ' err' : '';
     $statChat.textContent = state.stats.chatRequests;
-    $statChatErrors.textContent = state.stats.chatErrors > 0 ? '(' + state.stats.chatErrors + ' err)' : '';
+    $statChatErrors.textContent = state.stats.chatErrors > 0 ? state.stats.chatErrors + ' err' : '';
     $statTotalConn.textContent = state.stats.totalConnections;
+    $statErrors.textContent = (state.stats.toolErrors || 0) + (state.stats.chatErrors || 0);
   }
 
   setInterval(() => {
@@ -813,36 +1170,55 @@
     return safe;
   }
 
-  // ── Tool Explorer (hierarchy) ──
+  // ── Tool Search Filter ──
+  let toolSearchQuery = '';
+  const $toolSearch = $('toolSearch');
+  if ($toolSearch) {
+    $toolSearch.addEventListener('input', (e) => {
+      toolSearchQuery = e.target.value.trim().toLowerCase();
+      renderExplorer(currentClients);
+    });
+  }
+
+  // ── Tool Explorer (hierarchy in sidebar) ──
   let expandedClients = new Set();
 
   function renderExplorer(clients) {
     currentClients = clients;
-    const totalTools = clients.reduce((sum, c) => sum + c.tools.length, 0);
-    $toolsBadge.textContent = totalTools;
 
     if (clients.length === 0) {
-      $explorerBody.innerHTML = '<div class="empty-state"><div class="icon">📡</div>No broker-clients connected</div>';
+      $explorerBody.innerHTML = '<div class="empty-state"><div class="icon">📡</div><div class="msg">No broker-clients connected</div></div>';
       return;
     }
 
     $explorerBody.innerHTML = clients.map(c => {
       const isOpen = expandedClients.has(c.clientId);
+
+      // Filter tools by search query
+      const filteredTools = toolSearchQuery
+        ? c.tools.filter(t => t.name.toLowerCase().includes(toolSearchQuery) || (t.description || '').toLowerCase().includes(toolSearchQuery))
+        : c.tools;
+
+      // If searching and no tools match, skip this client
+      if (toolSearchQuery && filteredTools.length === 0) return '';
+
       return `
         <div class="tree-client">
           <div class="tree-client-header" data-client="${esc(c.clientId)}">
             <span class="tree-toggle ${isOpen ? 'open' : ''}">▶</span>
             <span class="tree-client-dot"></span>
             <span class="tree-client-name">${esc(c.clientId)}</span>
-            <span class="tree-client-count">${c.tools.length} tool${c.tools.length !== 1 ? 's' : ''}</span>
+            <span class="tree-client-count">${filteredTools.length}</span>
             <a class="tree-client-link" href="/client/${encodeURIComponent(c.clientId)}" target="_blank" title="Open ${esc(c.clientId)} dashboard" onclick="event.stopPropagation()">↗</a>
           </div>
-          <div class="tree-tools ${isOpen ? 'open' : ''}">
-            ${c.tools.map(t => {
+          <div class="tree-tools ${isOpen || toolSearchQuery ? 'open' : ''}">
+            ${filteredTools.map(t => {
               const isSel = selectedTool && selectedTool.clientId === c.clientId && selectedTool.name === t.name;
+              const actOn = isActivityEnabled(c.clientId, t.name);
               return `<div class="tree-tool ${isSel ? 'selected' : ''}" data-client="${esc(c.clientId)}" data-tool="${esc(t.name)}">
                 <span class="tree-tool-icon">⚡</span>
                 <span class="tree-tool-name">${esc(t.name)}</span>
+                <span class="tree-tool-activity ${actOn ? 'on' : ''}" data-act-client="${esc(c.clientId)}" data-act-tool="${esc(t.name)}" title="${actOn ? 'Activity ON — click to disable' : 'Activity OFF — click to enable'}">${actOn ? '📡' : '○'}</span>
               </div>`;
             }).join('')}
           </div>
@@ -860,12 +1236,22 @@
     });
 
     $explorerBody.querySelectorAll('.tree-tool').forEach(el => {
-      el.addEventListener('click', () => {
+      el.addEventListener('click', (e) => {
+        // If clicking the activity toggle, don't select the tool
+        if (e.target.classList.contains('tree-tool-activity')) return;
         const cid = el.dataset.client;
         const tname = el.dataset.tool;
         const client = clients.find(c => c.clientId === cid);
         const tool = client && client.tools.find(t => t.name === tname);
         if (tool) selectTool(cid, tool);
+      });
+    });
+
+    // Attach activity toggle handlers
+    $explorerBody.querySelectorAll('.tree-tool-activity').forEach(el => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleActivity(el.dataset.actClient, el.dataset.actTool);
       });
     });
   }
@@ -874,15 +1260,14 @@
   function selectTool(clientId, tool) {
     selectedTool = { clientId, name: tool.name, description: tool.description, inputSchema: tool.inputSchema };
 
-    // Update explorer selection
+    // Update sidebar selection
     $explorerBody.querySelectorAll('.tree-tool').forEach(el => {
       el.classList.toggle('selected', el.dataset.client === clientId && el.dataset.tool === tool.name);
     });
 
-    // Show header
-    $interactionHeader.style.display = 'flex';
-    $interactionTitle.textContent = tool.name;
-    $interactionClientTag.textContent = clientId;
+    // Update topbar
+    $topbarTitle.textContent = tool.name;
+    $topbarBreadcrumb.innerHTML = '<span class="sep">·</span> <span class="client-name">' + esc(clientId) + '</span>';
 
     // Build form
     const schema = tool.inputSchema || { type: 'object', properties: {} };
@@ -926,7 +1311,6 @@
           }
           html += '</select>';
         } else {
-          // String — use textarea if description suggests long text
           const isLong = (prop.description || '').toLowerCase().includes('prompt') || (prop.description || '').toLowerCase().includes('text') || (prop.description || '').toLowerCase().includes('content') || key === 'prompt' || key === 'text' || key === 'content';
           if (isLong) {
             html += '<textarea class="form-input" id="field-' + esc(key) + '" data-field="' + esc(key) + '" data-type="string" placeholder="' + esc(prop.description || key) + '"></textarea>';
@@ -944,7 +1328,21 @@
     $formActions.style.display = 'flex';
     $resultArea.style.display = 'none';
     $('btn-run').disabled = false;
-    $('btn-run').textContent = 'Run Tool';
+    $('btn-run').innerHTML = '▶ Run Tool';
+    updateToolCardActivityToggle();
+  }
+
+  function updateToolCardActivityToggle() {
+    if (!selectedTool) return;
+    const existing = document.getElementById('tool-activity-toggle');
+    if (existing) existing.remove();
+    const on = isActivityEnabled(selectedTool.clientId, selectedTool.name);
+    const row = document.createElement('div');
+    row.className = 'activity-toggle-row';
+    row.id = 'tool-activity-toggle';
+    row.innerHTML = '<span class="activity-toggle-check ' + (on ? 'on' : '') + '">' + (on ? '✓' : '') + '</span> Show Activity';
+    row.addEventListener('click', () => toggleActivity(selectedTool.clientId, selectedTool.name));
+    $interactionBody.insertBefore(row, $interactionBody.firstChild);
   }
 
   // ── Run Tool ──
@@ -952,7 +1350,7 @@
     if (!selectedTool) return;
     const btn = $('btn-run');
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span> Running...';
+    btn.innerHTML = '<span class="spinner"></span> Running…';
 
     // Gather form data
     const args = {};
@@ -995,7 +1393,7 @@
     }
 
     btn.disabled = false;
-    btn.textContent = 'Run Tool';
+    btn.innerHTML = '▶ Run Tool';
   };
 
   window.clearForm = function() {
@@ -1008,6 +1406,9 @@
 
   // ── Activity Log ──
   function addActivityEntry(entry) {
+    // Filter: only show activity for tools with activity enabled
+    if (!shouldShowActivity(entry)) return;
+
     activityCount++;
     displayedActivities.push(entry);
     if (displayedActivities.length > 200) displayedActivities.shift();
@@ -1018,7 +1419,7 @@
     if (empty) empty.remove();
 
     const div = document.createElement('div');
-    div.className = 'activity-item fade-in';
+    div.className = 'activity-item';
     div.innerHTML =
       '<span class="activity-time">' + formatTime(entry.time) + '</span>' +
       '<span class="activity-icon">' + (ACTIVITY_ICONS[entry.type] || '📌') + '</span>' +
@@ -1042,10 +1443,141 @@
   };
 
   window.clearLog = function() {
-    $activityBody.innerHTML = '<div class="empty-state"><div class="icon">📋</div>No activity yet</div>';
+    $activityBody.innerHTML = '<div class="empty-state"><div class="icon">📋</div><div class="msg">No activity yet</div></div>';
     displayedActivities = [];
     activityCount = 0;
     $activityBadge.textContent = '0';
+  };
+
+  // ── Broker Tools Quick Panel ──
+  window.btToggle = function(id) {
+    document.getElementById(id).classList.toggle('open');
+  };
+
+  function btSetTiming(id, ms, isError) {
+    const el = document.getElementById(id + '-timing');
+    el.textContent = ms + 'ms';
+    el.className = 'bt-panel-timing ' + (isError ? 'error' : 'success');
+  }
+
+  function btSetRunning(id) {
+    const el = document.getElementById(id + '-timing');
+    el.textContent = '…';
+    el.className = 'bt-panel-timing running';
+  }
+
+  function btShowResult(id, text, isError) {
+    const el = document.getElementById(id + '-result');
+    el.textContent = text;
+    el.className = 'bt-result visible' + (isError ? ' error' : '');
+  }
+
+  async function btCallTool(toolName, args) {
+    const start = Date.now();
+    const res = await fetch('/api/call-tool', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tool: toolName, arguments: args }),
+    });
+    const data = await res.json();
+    const ms = Date.now() - start;
+    const text = res.ok && !data.isError
+      ? (data.content || []).map(c => c.type === 'text' ? c.text : JSON.stringify(c)).join('\n') || '(ok)'
+      : data.error || (data.content || []).map(c => c.text || '').join('\n') || 'Unknown error';
+    return { ms, text, isError: !res.ok || data.isError || false };
+  }
+
+  window.btSpeak = async function() {
+    const text = $('bt-speak-text').value.trim();
+    if (!text) return;
+    btSetRunning('bt-speak');
+    const r = await btCallTool('speak', { text });
+    btSetTiming('bt-speak', r.ms, r.isError);
+    btShowResult('bt-speak', r.text, r.isError);
+  };
+
+  window.btAsk = async function() {
+    const prompt = $('bt-ask-prompt').value.trim();
+    if (!prompt) return;
+    btSetRunning('bt-ask');
+    const resultEl = document.getElementById('bt-ask-result');
+    resultEl.textContent = '';
+    resultEl.className = 'bt-result visible';
+    const body = { prompt };
+    const model = $('bt-ask-model').value.trim();
+    if (model) body.model = model;
+    if ($('bt-ask-speak').checked) body.speak = true;
+    const start = Date.now();
+    try {
+      const res = await fetch('/api/ask-stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const parts = buf.split('\n\n');
+        buf = parts.pop();
+        for (const part of parts) {
+          if (!part.startsWith('data: ')) continue;
+          const d = JSON.parse(part.slice(6));
+          if (d.token) resultEl.textContent += d.token;
+          if (d.error) { resultEl.textContent = d.error; resultEl.className = 'bt-result visible error'; }
+        }
+      }
+      btSetTiming('bt-ask', Date.now() - start, false);
+    } catch (err) {
+      resultEl.textContent = err.message;
+      resultEl.className = 'bt-result visible error';
+      btSetTiming('bt-ask', Date.now() - start, true);
+    }
+  };
+
+  window.btChat = async function() {
+    const msg = $('bt-chat-msg').value.trim();
+    if (!msg) return;
+    btSetRunning('bt-chat');
+    const model = $('bt-chat-model').value.trim();
+    const start = Date.now();
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: msg, model: model || undefined }),
+      });
+      const data = await res.json();
+      const ms = data.duration || (Date.now() - start);
+      if (res.ok) {
+        btSetTiming('bt-chat', ms, false);
+        btShowResult('bt-chat', data.response || '(empty)', false);
+      } else {
+        btSetTiming('bt-chat', ms, true);
+        btShowResult('bt-chat', data.error || 'Unknown error', true);
+      }
+    } catch (err) {
+      btSetTiming('bt-chat', Date.now() - start, true);
+      btShowResult('bt-chat', 'Network error: ' + err.message, true);
+    }
+  };
+
+  window.btClients = async function() {
+    btSetRunning('bt-clients');
+    const r = await btCallTool('list_broker_clients', {});
+    btSetTiming('bt-clients', r.ms, r.isError);
+    if (!r.isError) {
+      try {
+        const clients = JSON.parse(r.text);
+        const summary = clients.map(c => c.clientId + ' (' + c.tools.length + ' tools)').join('\n');
+        btShowResult('bt-clients', summary || '(no clients)', false);
+      } catch { btShowResult('bt-clients', r.text, false); }
+    } else {
+      btShowResult('bt-clients', r.text, true);
+    }
   };
 
   // ── SSE ──
@@ -1071,7 +1603,7 @@
 
     evtSource.onerror = () => {
       $sseDot.classList.remove('connected');
-      $sseLabel.textContent = 'Reconnecting...';
+      $sseLabel.textContent = 'Reconnecting…';
     };
   }
 
