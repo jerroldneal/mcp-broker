@@ -29,6 +29,7 @@ import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { WebSocketServer } from 'ws';
 import express from 'express';
+import http from 'http';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -41,7 +42,7 @@ const WS_PORT = parseInt(process.env.BROKER_WS_PORT || '3099', 10);
 const HTTP_PORT = parseInt(process.env.MCP_HTTP_PORT || '3098', 10);
 const TOOL_CALL_TIMEOUT_MS = 300_000;
 const OLLAMA_API_URL = process.env.OLLAMA_API_URL || 'http://localhost:11434';
-const DEFAULT_MODEL = process.env.OLLAMA_MODEL || 'qwen2.5:1.5b';
+const DEFAULT_MODEL = process.env.OLLAMA_MODEL || 'qwen2.5:14b';
 const ACTIVITY_LOG_MAX = 200;
 const NOTIFICATION_MAX_PER_CLIENT = 100;
 const NOTIFICATION_MAX_GLOBAL = 500;
@@ -157,7 +158,12 @@ function log(msg) {
 
 // ─── WebSocket Server (broker-client side) ──────────────────────────────────
 
-const wss = new WebSocketServer({ port: WS_PORT });
+const wsHttpServer = http.createServer((_req, res) => {
+  res.writeHead(302, { Location: `http://localhost:${HTTP_PORT}/` });
+  res.end();
+});
+wsHttpServer.listen(WS_PORT);
+const wss = new WebSocketServer({ server: wsHttpServer });
 log(`WebSocket server listening on port ${WS_PORT}`);
 
 wss.on('connection', (ws) => {

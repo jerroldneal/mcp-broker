@@ -95,7 +95,7 @@ npm run ollama
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `OLLAMA_URL` | `http://localhost:11434` | Ollama API base URL |
-| `OLLAMA_MODEL` | `qwen2.5:3b` | Default model |
+| `OLLAMA_MODEL` | `qwen2.5:14b` | Default model |
 
 ---
 

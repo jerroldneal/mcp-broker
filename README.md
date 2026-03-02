@@ -327,7 +327,7 @@ Browser (clock.js)           MCP Broker (:3098)        ollama-rc.js            O
 | Environment Variable | Default | Description |
 |---|---|---|
 | `OLLAMA_URL` | `http://localhost:11434` | Ollama API base URL |
-| `OLLAMA_MODEL` | `qwen2.5:3b` | Default model for generate calls |
+| `OLLAMA_MODEL` | `qwen2.5:14b` | Default model for generate calls |
 | `BROKER_WS_URL` | `ws://localhost:3099` | MCP broker WebSocket URL |
 
 ## VS Code MCP Configuration
