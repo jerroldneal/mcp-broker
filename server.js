@@ -28,6 +28,17 @@
  *   broker-client → server:  { type: "unsubscribe" }
  *   server → broker-client:  { type: "unsubscribed" }
  *
+ * Tool Events (tools as event emitters):
+ *   broker-client → server:  { type: "tool_event", tool, event }
+ *   server → broker-client:  { type: "tool_event_ack", tool, timestamp }
+ *   broker-client → server:  { type: "tool_events/subscribe", tool }
+ *   server → broker-client:  { type: "tool_events/subscribed", tool }
+ *   server → subscriber:    { type: "tool_event", clientId, tool, event, timestamp }
+ *   broker-client → server:  { type: "tool_events/unsubscribe", tool }
+ *   server → broker-client:  { type: "tool_events/unsubscribed", tool }
+ *   broker-client → server:  { type: "tool_events/list" }
+ *   server → broker-client:  { type: "tool_events/list", tools: [...] }
+ *
  * Resources (MCP-style subscriptions):
  *   broker-client → server:  { type: "resources/update", uri, content }
  *   server → broker-client:  { type: "resources/updated", uri }
@@ -100,6 +111,11 @@ const wsSubscriptions = new Map();
 const resources = new Map();
 /** Resource subscriptions: uri → Set<ws> */
 const resourceSubscriptions = new Map();
+
+// ─── Tool Event Subscriptions ────────────────────────────────────────────────
+
+/** Tool event subscriptions: namespacedTool → Set<ws> */
+const toolEventSubscriptions = new Map();
 
 function storeNotification(clientId, notification) {
   // Per-client buffer
@@ -390,6 +406,75 @@ wss.on('connection', (ws) => {
         break;
       }
 
+      // ── Tool Event Operations ──
+
+      case 'tool_event': {
+        if (!assignedClientId) {
+          ws.send(JSON.stringify({ type: 'error', message: 'Must register before emitting tool events' }));
+          break;
+        }
+        const evtTool = msg.tool;
+        if (!evtTool) {
+          ws.send(JSON.stringify({ type: 'error', message: 'tool name is required for tool_event' }));
+          break;
+        }
+        const nsEvtTool = namespacedTool(assignedClientId, evtTool);
+        const evtTimestamp = new Date().toISOString();
+        const toolEvtPayload = { clientId: assignedClientId, tool: evtTool, event: msg.event || {}, timestamp: evtTimestamp };
+        // Forward to subscribers
+        const evtSubs = toolEventSubscriptions.get(nsEvtTool);
+        let evtSent = 0;
+        if (evtSubs) {
+          const evtMsg = JSON.stringify({ type: 'tool_event', ...toolEvtPayload });
+          for (const subWs of evtSubs) {
+            if (subWs.readyState === 1 && subWs !== ws) {
+              try { subWs.send(evtMsg); evtSent++; } catch {}
+            }
+          }
+        }
+        log(`[TOOL_EVENT] ${assignedClientId}/${evtTool} → ${evtSent}/${evtSubs?.size || 0} subscribers`);
+        addActivity('tool_event', `${assignedClientId}/${evtTool} emitted event`, { clientId: assignedClientId, tool: evtTool });
+        ws.send(JSON.stringify({ type: 'tool_event_ack', tool: evtTool, timestamp: evtTimestamp }));
+        break;
+      }
+
+      case 'tool_events/subscribe': {
+        if (!assignedClientId) {
+          ws.send(JSON.stringify({ type: 'error', message: 'Must register before subscribing to tool events' }));
+          break;
+        }
+        const subTool = msg.tool;
+        if (!subTool) {
+          ws.send(JSON.stringify({ type: 'error', message: 'tool name is required (use clientId__toolName format)' }));
+          break;
+        }
+        if (!toolEventSubscriptions.has(subTool)) toolEventSubscriptions.set(subTool, new Set());
+        toolEventSubscriptions.get(subTool).add(ws);
+        log(`"${assignedClientId}" subscribed to tool events: ${subTool}`);
+        addActivity('tool_event_subscribe', `"${assignedClientId}" subscribed to ${subTool}`, { clientId: assignedClientId, tool: subTool });
+        ws.send(JSON.stringify({ type: 'tool_events/subscribed', tool: subTool }));
+        break;
+      }
+
+      case 'tool_events/unsubscribe': {
+        const unsubTool = msg.tool;
+        if (unsubTool && toolEventSubscriptions.has(unsubTool)) {
+          toolEventSubscriptions.get(unsubTool).delete(ws);
+          if (toolEventSubscriptions.get(unsubTool).size === 0) toolEventSubscriptions.delete(unsubTool);
+        }
+        ws.send(JSON.stringify({ type: 'tool_events/unsubscribed', tool: unsubTool }));
+        break;
+      }
+
+      case 'tool_events/list': {
+        const teList = [];
+        for (const [nsTool, subs] of toolEventSubscriptions) {
+          teList.push({ tool: nsTool, subscribers: subs.size });
+        }
+        ws.send(JSON.stringify({ type: 'tool_events/list', tools: teList }));
+        break;
+      }
+
       case 'call_tool': {
         // Broker-client requesting to call a tool (built-in or on another client)
         const callId = msg.callId || crypto.randomBytes(8).toString('hex');
@@ -427,6 +512,11 @@ wss.on('connection', (ws) => {
     for (const [uri, subs] of resourceSubscriptions) {
       subs.delete(ws);
       if (subs.size === 0) resourceSubscriptions.delete(uri);
+    }
+    // Clean up tool event subscriptions
+    for (const [tool, subs] of toolEventSubscriptions) {
+      subs.delete(ws);
+      if (subs.size === 0) toolEventSubscriptions.delete(tool);
     }
     if (assignedClientId && registry.has(assignedClientId)) {
       // Clean up resources published by this client
