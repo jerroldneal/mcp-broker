@@ -22,6 +22,24 @@
  *   server → broker-client:  { type: "chat_error", requestId, error }
  *   broker-client → server:  { type: "notification", event }
  *   server → broker-client:  { type: "notification_ack", timestamp }
+ *   broker-client → server:  { type: "subscribe", clientIds: ["poker-table"] }
+ *   server → broker-client:  { type: "subscribed", subscriptions: [...] }
+ *   server → broker-client:  { type: "notification", clientId, event, timestamp }
+ *   broker-client → server:  { type: "unsubscribe" }
+ *   server → broker-client:  { type: "unsubscribed" }
+ *
+ * Resources (MCP-style subscriptions):
+ *   broker-client → server:  { type: "resources/update", uri, content }
+ *   server → broker-client:  { type: "resources/updated", uri }
+ *   broker-client → server:  { type: "resources/subscribe", uri }
+ *   server → broker-client:  { type: "resources/subscribed", uri }
+ *   broker-client → server:  { type: "resources/unsubscribe", uri }
+ *   server → broker-client:  { type: "resources/unsubscribed", uri }
+ *   broker-client → server:  { type: "resources/read", uri }
+ *   server → broker-client:  { type: "resources/content", uri, content, clientId, updatedAt }
+ *   server → subscriber:    { type: "notifications/resources/updated", uri }
+ *   broker-client → server:  { type: "resources/list" }
+ *   server → broker-client:  { type: "resources/list", resources: [...] }
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -73,6 +91,15 @@ const sseClients = new Set();
 const clientNotifications = new Map();
 /** Global notification ring buffer */
 const globalNotifications = [];
+/** WebSocket notification subscriptions: subscriberWs → Set<clientId|'*'> */
+const wsSubscriptions = new Map();
+
+// ─── Resource Storage (MCP-style) ────────────────────────────────────────────
+
+/** Published resources: uri → { content, clientId, updatedAt } */
+const resources = new Map();
+/** Resource subscriptions: uri → Set<ws> */
+const resourceSubscriptions = new Map();
 
 function storeNotification(clientId, notification) {
   // Per-client buffer
@@ -95,9 +122,20 @@ function getNotifications(clientId, limit = 50) {
 }
 
 function broadcastNotification(notification) {
+  // SSE clients (dashboard)
   for (const res of sseClients) {
     res.write(`data: ${JSON.stringify({ type: 'notification', ...notification })}\n\n`);
   }
+  // WebSocket subscribers
+  const payload = JSON.stringify({ type: 'notification', ...notification });
+  let sent = 0;
+  for (const [ws, filters] of wsSubscriptions) {
+    if (ws.readyState !== 1) continue; // OPEN = 1
+    if (filters.has('*') || filters.has(notification.clientId)) {
+      try { ws.send(payload); sent++; } catch {}
+    }
+  }
+  log(`[NOTIF] from=${notification.clientId} event=${notification.event?.type || '?'} sent_to=${sent}/${wsSubscriptions.size} ws_subs`);
 }
 
 function addActivity(type, message, data) {
@@ -240,6 +278,99 @@ wss.on('connection', (ws) => {
         break;
       }
 
+      case 'subscribe': {
+        if (!assignedClientId) {
+          ws.send(JSON.stringify({ type: 'error', message: 'Must register before subscribing' }));
+          break;
+        }
+        const subClientIds = Array.isArray(msg.clientIds) ? msg.clientIds : (msg.clientId ? [msg.clientId] : ['*']);
+        if (!wsSubscriptions.has(ws)) wsSubscriptions.set(ws, new Set());
+        const subs = wsSubscriptions.get(ws);
+        for (const id of subClientIds) subs.add(id);
+        log(`"${assignedClientId}" subscribed to notifications from: ${[...subs].join(', ')}`);
+        addActivity('subscribe', `"${assignedClientId}" subscribed to [${subClientIds.join(', ')}]`, { clientId: assignedClientId, subscriptions: [...subs] });
+        ws.send(JSON.stringify({ type: 'subscribed', subscriptions: [...subs] }));
+        break;
+      }
+
+      case 'unsubscribe': {
+        wsSubscriptions.delete(ws);
+        ws.send(JSON.stringify({ type: 'unsubscribed' }));
+        break;
+      }
+
+      // ── MCP-style Resource Operations ──
+
+      case 'resources/update': {
+        if (!assignedClientId) {
+          ws.send(JSON.stringify({ type: 'error', message: 'Must register before publishing resources' }));
+          break;
+        }
+        const uri = msg.uri;
+        if (!uri) {
+          ws.send(JSON.stringify({ type: 'error', message: 'Resource URI is required' }));
+          break;
+        }
+        const updatedAt = new Date().toISOString();
+        resources.set(uri, { content: msg.content, clientId: assignedClientId, updatedAt });
+        // Notify resource subscribers
+        const subs = resourceSubscriptions.get(uri);
+        let resSent = 0;
+        if (subs) {
+          const notification = JSON.stringify({ type: 'notifications/resources/updated', uri });
+          for (const subWs of subs) {
+            if (subWs.readyState === 1 && subWs !== ws) {
+              try { subWs.send(notification); resSent++; } catch {}
+            }
+          }
+        }
+        log(`[RES] ${assignedClientId} updated ${uri} → notified ${resSent}/${subs?.size || 0} subscribers`);
+        addActivity('resource_update', `${assignedClientId} updated ${uri}`, { clientId: assignedClientId, uri });
+        ws.send(JSON.stringify({ type: 'resources/updated', uri }));
+        break;
+      }
+
+      case 'resources/subscribe': {
+        const subUri = msg.uri;
+        if (!subUri) {
+          ws.send(JSON.stringify({ type: 'error', message: 'Resource URI is required' }));
+          break;
+        }
+        if (!resourceSubscriptions.has(subUri)) resourceSubscriptions.set(subUri, new Set());
+        resourceSubscriptions.get(subUri).add(ws);
+        log(`"${assignedClientId || 'anonymous'}" subscribed to resource: ${subUri}`);
+        addActivity('resource_subscribe', `"${assignedClientId || 'anonymous'}" subscribed to ${subUri}`, { clientId: assignedClientId, uri: subUri });
+        ws.send(JSON.stringify({ type: 'resources/subscribed', uri: subUri }));
+        break;
+      }
+
+      case 'resources/unsubscribe': {
+        const unsubUri = msg.uri;
+        if (unsubUri && resourceSubscriptions.has(unsubUri)) {
+          resourceSubscriptions.get(unsubUri).delete(ws);
+          if (resourceSubscriptions.get(unsubUri).size === 0) resourceSubscriptions.delete(unsubUri);
+        }
+        ws.send(JSON.stringify({ type: 'resources/unsubscribed', uri: unsubUri }));
+        break;
+      }
+
+      case 'resources/read': {
+        const readUri = msg.uri;
+        const resource = readUri ? resources.get(readUri) : null;
+        if (resource) {
+          ws.send(JSON.stringify({ type: 'resources/content', uri: readUri, content: resource.content, clientId: resource.clientId, updatedAt: resource.updatedAt }));
+        } else {
+          ws.send(JSON.stringify({ type: 'resources/content', uri: readUri, content: null, clientId: null, updatedAt: null }));
+        }
+        break;
+      }
+
+      case 'resources/list': {
+        const list = [...resources.entries()].map(([uri, r]) => ({ uri, clientId: r.clientId, updatedAt: r.updatedAt }));
+        ws.send(JSON.stringify({ type: 'resources/list', resources: list }));
+        break;
+      }
+
       case 'notification': {
         if (!assignedClientId) {
           ws.send(JSON.stringify({ type: 'error', message: 'Must register before sending notifications' }));
@@ -291,7 +422,17 @@ wss.on('connection', (ws) => {
   });
 
   ws.on('close', () => {
+    wsSubscriptions.delete(ws);
+    // Clean up resource subscriptions
+    for (const [uri, subs] of resourceSubscriptions) {
+      subs.delete(ws);
+      if (subs.size === 0) resourceSubscriptions.delete(uri);
+    }
     if (assignedClientId && registry.has(assignedClientId)) {
+      // Clean up resources published by this client
+      for (const [uri, r] of resources) {
+        if (r.clientId === assignedClientId) resources.delete(uri);
+      }
       registry.delete(assignedClientId);
       clearClientNotifications(assignedClientId);
       log(`Broker client "${assignedClientId}" disconnected`);
