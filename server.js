@@ -864,6 +864,38 @@ async function routeToolCall(name, args, context = {}) {
     }
   }
 
+  // Built-in: ask_agent (route to a connected agent, fallback to ask_ai)
+  if (name === 'ask_agent') {
+    const prompt = args?.prompt;
+    if (!prompt || typeof prompt !== 'string') {
+      return { content: [{ type: 'text', text: 'prompt string is required' }], isError: true };
+    }
+    const agentId = args?.agent || 'poc-agent';
+    const entry = registry.get(agentId);
+    if (!entry) {
+      log(`ask_agent: agent "${agentId}" not connected, falling back to ask_ai`);
+      return routeToolCall('ask_ai', { prompt, system: args?.system, model: args?.model, speak: args?.speak }, context);
+    }
+    try {
+      const result = await callProviderTool(agentId, 'ask', {
+        prompt: args?.system ? `${args.system}\n\n${prompt}` : prompt,
+        context: args?.context,
+      });
+      const text = result?.content?.[0]?.text || JSON.stringify(result);
+      if (args?.speak && text) {
+        try {
+          await callProviderTool('kokoro-tts', 'speak', { text });
+        } catch (speakErr) {
+          log(`ask_agent speak failed: ${speakErr.message}`);
+        }
+      }
+      return { content: [{ type: 'text', text }], isError: false };
+    } catch (err) {
+      log(`ask_agent failed: ${err.message}`);
+      return { content: [{ type: 'text', text: `Agent error: ${err.message}` }], isError: true };
+    }
+  }
+
   // Namespaced: clientId__toolName
   const parsed = parseNamespacedTool(name);
   if (!parsed) {
@@ -996,6 +1028,21 @@ const BUILTIN_TOOLS = [
         speak: { type: 'boolean', description: 'Whether to speak the final summary aloud (default: false)' },
       },
       required: ['clientId'],
+    },
+  },
+  {
+    name: 'ask_agent',
+    description: 'Ask a connected agent a question. Routes to a registered agent broker-client. Falls back to ask_ai (Ollama) if no agent is connected.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        prompt: { type: 'string', description: 'The question or task to send to the agent' },
+        system: { type: 'string', description: 'System prompt to guide behavior (optional)' },
+        context: { type: 'string', description: 'Additional context for the agent (optional)' },
+        agent: { type: 'string', description: 'Target agent clientId (default: poc-agent)' },
+        speak: { type: 'boolean', description: 'Whether to speak the response aloud (default: false)' },
+      },
+      required: ['prompt'],
     },
   },
 ];
