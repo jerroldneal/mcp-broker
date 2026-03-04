@@ -241,10 +241,16 @@ wss.on('connection', (ws) => {
 
         if (registry.has(clientId)) {
           const old = registry.get(clientId);
-          log(`Replacing stale broker-client "${clientId}" (reconnect)`);
-          try { old.ws.close(1000, 'Replaced by new connection'); } catch {}
+          if (old.ws !== ws) {
+            // Different socket — genuine reconnect, close the stale one
+            log(`Replacing stale broker-client "${clientId}" (reconnect)`);
+            try { old.ws.close(1000, 'Replaced by new connection'); } catch {}
+            addActivity('disconnect', `"${clientId}" replaced by reconnect`, { clientId });
+          } else {
+            // Same socket — client is re-registering (e.g., added a tool)
+            log(`Re-registering broker-client "${clientId}" (tool update)`);
+          }
           registry.delete(clientId);
-          addActivity('disconnect', `"${clientId}" replaced by reconnect`, { clientId });
         }
 
         const tools = Array.isArray(msg.tools) ? msg.tools : [];
@@ -255,6 +261,25 @@ wss.on('connection', (ws) => {
         addActivity('connect', `"${clientId}" registered with ${tools.length} tool(s)`, { clientId, tools: tools.map(t => t.name) });
         broadcastState();
         ws.send(JSON.stringify({ type: 'registered', clientId, dashboardUrl: `http://localhost:${HTTP_PORT}/client/${clientId}` }));
+        break;
+      }
+
+      case 'register_access': {
+        // Client registers access capabilities (e.g., execute, platform, readFile)
+        // These are stored alongside the client's tools in the registry
+        if (!assignedClientId) {
+          ws.send(JSON.stringify({ type: 'error', message: 'Must register before registering access capabilities' }));
+          break;
+        }
+        const capabilities = Array.isArray(msg.capabilities) ? msg.capabilities : [];
+        const entry = registry.get(assignedClientId);
+        if (entry) {
+          entry.access = capabilities;
+          log(`"${assignedClientId}" registered ${capabilities.length} access capability(ies): ${capabilities.map(c => c.name).join(', ')}`);
+          addActivity('register_access', `"${assignedClientId}" registered access: ${capabilities.map(c => c.name).join(', ')}`, { clientId: assignedClientId, capabilities: capabilities.map(c => c.name) });
+          broadcastState();
+        }
+        ws.send(JSON.stringify({ type: 'access_registered', capabilities: capabilities.map(c => c.name) }));
         break;
       }
 
@@ -488,7 +513,7 @@ wss.on('connection', (ws) => {
           try {
             stats.toolCalls++;
             addActivity('tool_call', `${assignedClientId} → ${toolName}`, { clientId: assignedClientId, tool: toolName, args: toolArgs });
-            const result = await routeToolCall(toolName, toolArgs);
+            const result = await routeToolCall(toolName, toolArgs, { callerId: assignedClientId });
             addActivity('tool_result', `${toolName} returned`, { clientId: assignedClientId, tool: toolName, isError: result.isError });
             if (result.isError) stats.toolErrors++;
             ws.send(JSON.stringify({ type: 'call_tool_result', callId, content: result.content, isError: result.isError || false }));
@@ -586,18 +611,121 @@ async function ollamaGenerate(prompt, { model, system } = {}) {
   return data.response || '';
 }
 
+// ─── Explain-Yourself: AI-Driven Probative Introspection ────────────────────
+
+/**
+ * Probe a connected broker-client using iterative AI questioning.
+ *
+ * Phase 1: Identity — gather metadata, ask AI what the client is
+ * Phase 2: State discovery — AI generates probes, broker executes them
+ * Phase 3: Deep dive — repeat Phase 2 up to configured depth
+ *
+ * @param {string} clientId
+ * @param {object} entry — registry entry { ws, tools, connectedAt }
+ * @param {number} depth — 1-5 levels of follow-up probing
+ * @returns {object} — structured probe report
+ */
+async function explainYourself(clientId, entry, depth) {
+  const probeChain = [];
+  const model = DEFAULT_MODEL;
+
+  // Phase 1: Identity — "What are you?"
+  const toolDescriptions = entry.tools.map(t =>
+    `- ${t.name}: ${t.description || '(no description)'}` +
+    (t.inputSchema?.properties ? ` | params: ${Object.keys(t.inputSchema.properties).join(', ')}` : '')
+  ).join('\n');
+
+  const identityPrompt = `A software client named "${clientId}" has connected to a tool-routing broker. It published these tools:\n\n${toolDescriptions}\n\nBased on the client name and its tools, what does this client do? What kind of system is it? Give a concise summary (2-3 sentences).`;
+
+  log(`explain_yourself: Phase 1 — identifying "${clientId}"`);
+  const identity = await ollamaGenerate(identityPrompt, { model });
+  probeChain.push({ phase: 1, type: 'identity', question: identityPrompt, answer: identity });
+
+  if (depth < 2) {
+    return { clientId, identity, probeDepth: depth, probeChain };
+  }
+
+  // Check if the client has an introspect tool
+  const hasIntrospect = entry.tools.some(t => t.name === 'introspect');
+  if (!hasIntrospect) {
+    return {
+      clientId,
+      identity,
+      note: 'Client does not publish an "introspect" tool — state probing not possible. Only identity phase completed.',
+      probeDepth: 1,
+      probeChain,
+    };
+  }
+
+  // Phase 2+: State Discovery — iterative probing
+  let context = `Client: "${clientId}"\nIdentity: ${identity}\n`;
+  const discoveries = {};
+
+  for (let level = 2; level <= depth; level++) {
+    // Ask AI what to probe next
+    const probeQuestionPrompt = `${context}\nYou have access to run JavaScript code in this client's environment. What single piece of JavaScript code should I run to learn more about its current state? Return ONLY the JavaScript code, nothing else. The code must return a JSON-serializable value. Keep it short and focused on discovering one specific thing.`;
+
+    log(`explain_yourself: Phase ${level} — generating probe for "${clientId}"`);
+    const probeCode = await ollamaGenerate(probeQuestionPrompt, {
+      model,
+      system: 'You are a software introspection expert. You generate minimal JavaScript code to discover the state of a running application. Return ONLY executable JavaScript code. No markdown fences, no explanation. The code must return a value.',
+    });
+
+    probeChain.push({ phase: level, type: 'probe_generated', code: probeCode });
+
+    // Execute the probe via the client's introspect tool
+    let probeResult;
+    try {
+      const toolResult = await callProviderTool(clientId, 'introspect', { code: probeCode });
+      const resultText = toolResult?.content?.[0]?.text || JSON.stringify(toolResult);
+      probeResult = resultText;
+    } catch (err) {
+      probeResult = `Error: ${err.message}`;
+    }
+
+    probeChain.push({ phase: level, type: 'probe_result', result: probeResult });
+
+    // Ask AI to interpret the result
+    const interpretPrompt = `${context}\nI ran this JavaScript code:\n\`\`\`\n${probeCode}\n\`\`\`\n\nThe result was:\n${probeResult}\n\nWhat does this tell us about the client's current state? Summarize in 1-2 sentences.`;
+
+    const interpretation = await ollamaGenerate(interpretPrompt, { model });
+    probeChain.push({ phase: level, type: 'interpretation', answer: interpretation });
+
+    discoveries[`depth_${level}`] = { code: probeCode, result: probeResult, interpretation };
+    context += `\nDiscovery (depth ${level}): ${interpretation}`;
+  }
+
+  // Final summary
+  const summaryPrompt = `${context}\n\nBased on everything discovered, provide a final structured summary of:\n1. What this client is\n2. What its current state is\n3. Key capabilities observed\n\nBe concise and factual.`;
+
+  const summary = await ollamaGenerate(summaryPrompt, { model });
+  probeChain.push({ phase: 'final', type: 'summary', answer: summary });
+
+  return {
+    clientId,
+    identity,
+    summary,
+    discoveries,
+    probeDepth: depth,
+    probeChain,
+  };
+}
+
 // ─── Tool Call Router ────────────────────────────────────────────────────────
 
 /**
  * Route a tool call: check built-in tools first, then namespaced client tools.
  * Used by both MCP HTTP and WebSocket call_tool paths.
+ * @param {string} name — tool name
+ * @param {object} args — tool arguments
+ * @param {object} [context] — optional context (callerId, etc.)
  */
-async function routeToolCall(name, args) {
+async function routeToolCall(name, args, context = {}) {
   // Built-in: list_broker_clients
   if (name === 'list_broker_clients') {
     const clients = [];
     for (const [clientId, entry] of registry) {
-      clients.push({ clientId, tools: entry.tools.map(t => t.name) });
+      clients.push({ clientId, tools: entry.tools.map(t => t.name), access: (entry.access || []).map(c => c.name) });
     }
     return { content: [{ type: 'text', text: JSON.stringify(clients, null, 2) }], isError: false };
   }
@@ -606,6 +734,49 @@ async function routeToolCall(name, args) {
   if (name === 'get_notifications') {
     const results = getNotifications(args?.clientId, args?.limit);
     return { content: [{ type: 'text', text: JSON.stringify(results, null, 2) }], isError: false };
+  }
+
+  // Built-in: get_caller_access — check what access capabilities a client has registered
+  if (name === 'get_caller_access') {
+    const targetId = args?.clientId;
+    if (!targetId || typeof targetId !== 'string') {
+      return { content: [{ type: 'text', text: 'clientId string is required' }], isError: true };
+    }
+    const entry = registry.get(targetId);
+    if (!entry) {
+      return { content: [{ type: 'text', text: `Client "${targetId}" is not connected` }], isError: true };
+    }
+    const access = entry.access || [];
+    return {
+      content: [{ type: 'text', text: JSON.stringify({ clientId: targetId, capabilities: access.map(c => c.name), hasAccess: access.length > 0 }, null, 2) }],
+      isError: false,
+    };
+  }
+
+  // Built-in: request_access — call an access capability on a specific client
+  if (name === 'request_access') {
+    const targetId = args?.clientId;
+    const capability = args?.capability;
+    const capabilityArgs = args?.arguments || {};
+    if (!targetId || !capability) {
+      return { content: [{ type: 'text', text: 'clientId and capability are required' }], isError: true };
+    }
+    const entry = registry.get(targetId);
+    if (!entry) {
+      return { content: [{ type: 'text', text: `Client "${targetId}" is not connected` }], isError: true };
+    }
+    const access = entry.access || [];
+    const cap = access.find(c => c.name === capability);
+    if (!cap) {
+      return { content: [{ type: 'text', text: `Client "${targetId}" has not registered "${capability}" access` }], isError: true };
+    }
+    // Route as a tool_call to the client — the access capability name prefixed with __access_
+    try {
+      const result = await callProviderTool(targetId, `__access_${capability}`, capabilityArgs, { callerId: context.callerId });
+      return result;
+    } catch (err) {
+      return { content: [{ type: 'text', text: `Access call failed: ${err.message}` }], isError: true };
+    }
   }
 
   // Built-in: speak (via kokoro-tts broker-client WebSocket)
@@ -640,6 +811,34 @@ async function routeToolCall(name, args) {
     }
   }
 
+  // Built-in: explain_yourself (AI-driven probative introspection)
+  if (name === 'explain_yourself') {
+    const clientId = args?.clientId;
+    if (!clientId || typeof clientId !== 'string') {
+      return { content: [{ type: 'text', text: 'clientId string is required' }], isError: true };
+    }
+    const entry = registry.get(clientId);
+    if (!entry) {
+      return { content: [{ type: 'text', text: `Client "${clientId}" is not connected` }], isError: true };
+    }
+    const depth = Math.min(Math.max(args?.depth || 2, 1), 5);
+
+    try {
+      const result = await explainYourself(clientId, entry, depth);
+      if (args?.speak && result.identity) {
+        try {
+          await callProviderTool('kokoro-tts', 'speak', { text: result.identity });
+        } catch (speakErr) {
+          log(`explain_yourself speak failed: ${speakErr.message}`);
+        }
+      }
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }], isError: false };
+    } catch (err) {
+      log(`explain_yourself failed: ${err.message}`);
+      return { content: [{ type: 'text', text: `Explain-yourself error: ${err.message}` }], isError: true };
+    }
+  }
+
   // Built-in: ask_ai (direct HTTP to Ollama MCP, optional TTS)
   if (name === 'ask_ai') {
     const prompt = args?.prompt;
@@ -670,10 +869,10 @@ async function routeToolCall(name, args) {
   if (!parsed) {
     return { content: [{ type: 'text', text: `Unknown tool: ${name}` }], isError: true };
   }
-  return await callProviderTool(parsed.clientId, parsed.toolName, args);
+  return await callProviderTool(parsed.clientId, parsed.toolName, args, { callerId: context.callerId });
 }
 
-function callProviderTool(clientId, toolName, args) {
+function callProviderTool(clientId, toolName, args, { callerId } = {}) {
   return new Promise((resolve, reject) => {
     const entry = registry.get(clientId);
     if (!entry) {
@@ -689,12 +888,15 @@ function callProviderTool(clientId, toolName, args) {
 
     pendingCalls.set(callId, { resolve, reject, timer });
 
-    entry.ws.send(JSON.stringify({
+    const message = {
       type: 'tool_call',
       callId,
       tool: toolName,
       arguments: args || {},
-    }));
+    };
+    // Pass callerId so the tool provider knows who initiated the call
+    if (callerId) message.callerId = callerId;
+    entry.ws.send(JSON.stringify(message));
   });
 }
 
@@ -719,6 +921,30 @@ const BUILTIN_TOOLS = [
         clientId: { type: 'string', description: 'Filter by client ID (optional)' },
         limit: { type: 'number', description: 'Max notifications to return (default: 50)' },
       },
+    },
+  },
+  {
+    name: 'get_caller_access',
+    description: 'Check what access capabilities a broker-client has registered. Returns the list of capabilities the client offers (e.g., execute, platform, readFile).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        clientId: { type: 'string', description: 'The broker-client ID to check for access capabilities' },
+      },
+      required: ['clientId'],
+    },
+  },
+  {
+    name: 'request_access',
+    description: 'Call an access capability on a specific broker-client. The client must have previously registered this capability via register_access. This is how tool providers (e.g., Shell Exec Remote) execute commands on a caller\'s machine.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        clientId: { type: 'string', description: 'The broker-client ID that has the access capability' },
+        capability: { type: 'string', description: 'The capability name (e.g., execute, platform, readFile)' },
+        arguments: { type: 'object', description: 'Arguments to pass to the access capability handler' },
+      },
+      required: ['clientId', 'capability'],
     },
   },
   {
@@ -757,6 +983,19 @@ const BUILTIN_TOOLS = [
         speak: { type: 'boolean', description: 'Whether to speak the response aloud (default: false)' },
       },
       required: ['prompt'],
+    },
+  },
+  {
+    name: 'explain_yourself',
+    description: 'AI-driven probative introspection of a connected broker-client. Iteratively probes a client using AI-generated questions to discover what it is, what it does, and its current state. Requires the target client to publish an "introspect" tool.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        clientId: { type: 'string', description: 'The broker-client ID to probe' },
+        depth: { type: 'number', description: 'How many levels of follow-up probing to perform (default: 2, max: 5)' },
+        speak: { type: 'boolean', description: 'Whether to speak the final summary aloud (default: false)' },
+      },
+      required: ['clientId'],
     },
   },
 ];
