@@ -56,14 +56,14 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { WebSocketServer } from 'ws';
+import crypto from 'crypto';
 import express from 'express';
 import http from 'http';
-import crypto from 'crypto';
-import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { generateClientDashboard } from './client-dashboard.js';
+import { fileURLToPath } from 'url';
+import { WebSocketServer } from 'ws';
 import { BrokerClient } from '../mcp-broker-client/sdk.js';
+import { generateClientDashboard } from './client-dashboard.js';
 
 // ─── Configuration ───────────────────────────────────────────────────────────
 
@@ -71,7 +71,7 @@ const WS_PORT = parseInt(process.env.BROKER_WS_PORT || '3099', 10);
 const HTTP_PORT = parseInt(process.env.MCP_HTTP_PORT || '3098', 10);
 const TOOL_CALL_TIMEOUT_MS = 300_000;
 const OLLAMA_API_URL = process.env.OLLAMA_API_URL || 'http://localhost:11434';
-const DEFAULT_MODEL = process.env.OLLAMA_MODEL || 'qwen2.5:1.5b';
+const DEFAULT_MODEL = process.env.OLLAMA_MODEL || 'qwen2.5:3b';
 const ACTIVITY_LOG_MAX = 200;
 const NOTIFICATION_MAX_PER_CLIENT = 100;
 const NOTIFICATION_MAX_GLOBAL = 500;
@@ -839,17 +839,41 @@ async function routeToolCall(name, args, context = {}) {
     }
   }
 
-  // Built-in: ask_ai (direct HTTP to Ollama MCP, optional TTS)
+  // Built-in: ask_ai (tiered: AI+ = copilot top, AI = copilot standard, AI- = ollama)
   if (name === 'ask_ai') {
     const prompt = args?.prompt;
     if (!prompt || typeof prompt !== 'string') {
       return { content: [{ type: 'text', text: 'prompt string is required' }], isError: true };
     }
+    const tier = args?.tier || 'AI-';
+    const fullPrompt = args?.system ? `${args.system}\n\n${prompt}` : prompt;
     try {
-      const text = await ollamaGenerate(
-        args?.system ? `${args.system}\n\n${prompt}` : prompt,
-        { model: args?.model || DEFAULT_MODEL },
-      );
+      let text;
+      if (tier === 'AI+' || tier === 'AI') {
+        // Route to connected copilot agent for higher-tier models
+        const agentId = tier === 'AI+' ? 'copilot-agent-plus' : 'copilot-agent';
+        const entry = registry.get(agentId);
+        if (entry) {
+          log(`ask_ai tier=${tier}: routing to ${agentId}`);
+          const result = await callProviderTool(agentId, 'ask', { prompt: fullPrompt, context: args?.context });
+          text = result?.content?.[0]?.text || JSON.stringify(result);
+        } else {
+          // Fallback: try the other copilot agent, then ollama
+          const fallbackId = tier === 'AI+' ? 'copilot-agent' : null;
+          const fallbackEntry = fallbackId && registry.get(fallbackId);
+          if (fallbackEntry) {
+            log(`ask_ai tier=${tier}: ${agentId} not connected, falling back to ${fallbackId}`);
+            const result = await callProviderTool(fallbackId, 'ask', { prompt: fullPrompt, context: args?.context });
+            text = result?.content?.[0]?.text || JSON.stringify(result);
+          } else {
+            log(`ask_ai tier=${tier}: no copilot agent connected, falling back to ollama`);
+            text = await ollamaGenerate(fullPrompt, { model: args?.model || DEFAULT_MODEL });
+          }
+        }
+      } else {
+        // AI- (default): direct to Ollama
+        text = await ollamaGenerate(fullPrompt, { model: args?.model || DEFAULT_MODEL });
+      }
       if (args?.speak && text) {
         try {
           await callProviderTool('kokoro-tts', 'speak', { text });
@@ -1005,14 +1029,16 @@ const BUILTIN_TOOLS = [
   },
   {
     name: 'ask_ai',
-    description: 'Ask the AI a question and get a text response. Optionally speak the answer aloud. Any tiny client can use this for intelligence without local resources.',
+    description: 'Ask the AI a question and get a text response. Supports tiered AI: AI+ (Copilot top model), AI (Copilot standard), AI- (Ollama local). Optionally speak the answer aloud.',
     inputSchema: {
       type: 'object',
       properties: {
         prompt: { type: 'string', description: 'The question or prompt to send to the AI' },
         system: { type: 'string', description: 'System prompt to guide behavior (optional)' },
-        model: { type: 'string', description: `Model to use (default: ${DEFAULT_MODEL})` },
+        tier: { type: 'string', enum: ['AI+', 'AI', 'AI-'], description: 'AI tier: AI+ (Copilot top model), AI (Copilot standard), AI- (Ollama local, default)' },
+        model: { type: 'string', description: `Model to use for AI- tier (default: ${DEFAULT_MODEL})` },
         speak: { type: 'boolean', description: 'Whether to speak the response aloud (default: false)' },
+        context: { type: 'string', description: 'Additional context for AI+/AI tier agents (optional)' },
       },
       required: ['prompt'],
     },
