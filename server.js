@@ -69,6 +69,7 @@ import { generateClientDashboard } from './client-dashboard.js';
 
 const WS_PORT = parseInt(process.env.BROKER_WS_PORT || '3099', 10);
 const HTTP_PORT = parseInt(process.env.MCP_HTTP_PORT || '3098', 10);
+const BIND_HOST = process.env.BROKER_BIND_HOST || '0.0.0.0';
 const TOOL_CALL_TIMEOUT_MS = 300_000;
 const OLLAMA_API_URL = process.env.OLLAMA_API_URL || 'http://localhost:11434';
 const DEFAULT_MODEL = process.env.OLLAMA_MODEL || 'qwen2.5:3b';
@@ -216,9 +217,9 @@ const wsHttpServer = http.createServer((_req, res) => {
   res.writeHead(302, { Location: `http://localhost:${HTTP_PORT}/` });
   res.end();
 });
-wsHttpServer.listen(WS_PORT);
+wsHttpServer.listen(WS_PORT, BIND_HOST);
 const wss = new WebSocketServer({ server: wsHttpServer });
-log(`WebSocket server listening on port ${WS_PORT}`);
+log(`WebSocket server listening on ${BIND_HOST}:${WS_PORT}`);
 
 wss.on('connection', (ws) => {
   let assignedClientId = null;
@@ -1390,8 +1391,8 @@ app.post('/api/chat', async (req, res) => {
 // ─── Start ───────────────────────────────────────────────────────────────────
 
 async function main() {
-  app.listen(HTTP_PORT, () => {
-    log(`MCP HTTP server listening on http://localhost:${HTTP_PORT}/mcp`);
+  app.listen(HTTP_PORT, BIND_HOST, () => {
+    log(`MCP HTTP server listening on http://${BIND_HOST}:${HTTP_PORT}/mcp`);
   });
   log('MCP Broker running (HTTP + WebSocket)');
 
